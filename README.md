@@ -1,4 +1,4 @@
-# Smriti 🌸
+# Smriti
 
 A clean and minimal website built to preserve and showcase memories beautifully.
 
