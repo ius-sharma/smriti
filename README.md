@@ -47,10 +47,6 @@ Open `index.html` in your browser or run it using Live Server.
 └── README.md
 ```
 
-## 📸 Preview
-
-![Preview](./assets/preview.png)
-
 > Replace the image with your own project screenshot.
 
 ## 📄 License
