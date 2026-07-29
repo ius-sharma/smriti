@@ -156,7 +156,14 @@ export default function Home() {
     const saved = localStorage.getItem("smriti_tributes");
     if (saved) {
       try {
-        setTeachers(JSON.parse(saved));
+        const parsed = JSON.parse(saved) as Teacher[];
+        // Sync predefined teachers with INITIAL_TEACHERS to ensure latest asset paths are loaded
+        const synced = parsed.map(t => {
+          const latest = INITIAL_TEACHERS.find(init => init.id === t.id);
+          return latest ? latest : t;
+        });
+        setTeachers(synced);
+        localStorage.setItem("smriti_tributes", JSON.stringify(synced));
       } catch (e) {
         setTeachers(INITIAL_TEACHERS);
       }
