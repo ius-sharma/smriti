@@ -79,12 +79,49 @@ const decompressData = async (base64: string): Promise<any> => {
   }
 };
 
+interface Festival {
+  name: string;
+  nameHindi?: string;
+  date: string;
+  description: string;
+}
+
+const FESTIVALS: Festival[] = [
+  // 2026
+  { name: "Nag Panchami", nameHindi: "नाग पंचमी", date: "2026-08-17T00:00:00+05:30", description: "A sacred day of traditional worship of Nagas (snakes)." },
+  { name: "Raksha Bandhan", nameHindi: "रक्षाबंधन", date: "2026-08-28T00:00:00+05:30", description: "Celebrating the sacred bond of love and protection between brothers and sisters." },
+  { name: "Krishna Janmashtami", nameHindi: "कृष्ण जन्माष्टमी", date: "2026-09-03T00:00:00+05:30", description: "Celebrating the birth of Lord Krishna, the eighth incarnation of Lord Vishnu." },
+  { name: "Ganesh Chaturthi", nameHindi: "गणेश चतुर्थी", date: "2026-09-14T00:00:00+05:30", description: "Celebrating the arrival of Lord Ganesha, the remover of obstacles." },
+  { name: "Sharad Navratri", nameHindi: "शरद नवरात्रि", date: "2026-10-11T00:00:00+05:30", description: "Nine nights dedicated to the worship of Goddess Durga's forms." },
+  { name: "Dussehra", nameHindi: "दशहरा", date: "2026-10-20T00:00:00+05:30", description: "Celebrating the victory of Lord Rama over Ravana, victory of good over evil." },
+  { name: "Diwali", nameHindi: "दीपावली", date: "2026-11-08T00:00:00+05:30", description: "The festival of lights, celebrating the return of Lord Rama to Ayodhya." },
+  { name: "Govardhan Puja", nameHindi: "गोवर्धन पूजा", date: "2026-11-09T00:00:00+05:30", description: "Worshipping Mount Govardhan and Lord Krishna's protection." },
+  { name: "Chhath Puja", nameHindi: "छठ पूजा", date: "2026-11-14T00:00:00+05:30", description: "Ancient solar festival dedicated to the Sun God and Chhathi Maiya." },
+  { name: "Kartik Purnima", nameHindi: "कार्तिक पूर्णिमा", date: "2026-11-24T00:00:00+05:30", description: "The auspicious full moon night in the holy month of Kartik." },
+  // 2027
+  { name: "Makar Sankranti", nameHindi: "मकर संक्रांति", date: "2027-01-14T00:00:00+05:30", description: "Harvest festival marking the sun's transition into Capricorn." },
+  { name: "Vasant Panchami", nameHindi: "वसंत पंचमी", date: "2027-02-11T00:00:00+05:30", description: "Celebrating learning and wisdom, dedicated to Goddess Saraswati." },
+  { name: "Maha Shivaratri", nameHindi: "महाशिवरात्रि", date: "2027-03-06T00:00:00+05:30", description: "The great night of Lord Shiva, celebrating cosmic marriage." },
+  { name: "Holi", nameHindi: "होली", date: "2027-03-22T00:00:00+05:30", description: "The vibrant spring festival of colors, joy, and new beginnings." },
+  { name: "Rama Navami", nameHindi: "राम नवमी", date: "2027-04-16T00:00:00+05:30", description: "Birth of Lord Rama, the ideal king and human." },
+  { name: "Hanuman Jayanti", nameHindi: "हनुमान जयंती", date: "2027-04-21T00:00:00+05:30", description: "Celebrating the birth of Lord Hanuman, the epitome of devotion." },
+  { name: "Raksha Bandhan", nameHindi: "रक्षाबंधन", date: "2027-08-17T00:00:00+05:30", description: "Celebrating the sacred bond of love and protection between siblings." },
+  { name: "Krishna Janmashtami", nameHindi: "कृष्ण जन्माष्टमी", date: "2027-08-25T00:00:00+05:30", description: "Celebrating the birth of Lord Krishna." },
+  { name: "Ganesh Chaturthi", nameHindi: "गणेश चतुर्थी", date: "2027-09-04T00:00:00+05:30", description: "Celebrating the arrival of Lord Ganesha." },
+  { name: "Dussehra", nameHindi: "दशहरा", date: "2027-10-09T00:00:00+05:30", description: "Victory of good over evil." },
+  { name: "Diwali", nameHindi: "दीपावली", date: "2027-10-29T00:00:00+05:30", description: "The festival of lights." }
+];
+
 export default function Home() {
   // General app state
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSubject, setSelectedSubject] = useState("All");
   const [activeTeacher, setActiveTeacher] = useState<Teacher | null>(null);
+
+  // Festival countdown states
+  const [upcomingFestival, setUpcomingFestival] = useState<Festival | null>(null);
+  const [timeLeft, setTimeLeft] = useState<{ days: number; hours: number; minutes: number; seconds: number; isToday: boolean } | null>(null);
   
   // Modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -198,11 +235,15 @@ export default function Home() {
         };
         const id = slugMap[teacherSlug];
         if (id) {
-          const found = INITIAL_TEACHERS.find(t => t.id === id);
-          if (found) {
-            setPersonalizedTeacher(found);
-            setPersonalizedStep(1);
-          }
+          // Deactivate links for predefined teachers under Guiding Lights
+          setToastMessage("Tribute links for Guiding Lights have been deactivated.");
+          setShowToast(true);
+          setTimeout(() => setShowToast(false), 5000);
+          
+          // Clear teacher param from URL without reloading
+          const url = new URL(window.location.href);
+          url.searchParams.delete("teacher");
+          window.history.replaceState({}, "", url.toString());
         }
       } else {
         const compressedParam = params.get("c") || params.get("custom");
@@ -311,6 +352,43 @@ export default function Home() {
     }
   }, [personalizedStep]);
 
+  // Upcoming festival countdown calculation
+  useEffect(() => {
+    const updateTimer = () => {
+      const now = new Date();
+      
+      // Find next upcoming festival. Stays active on the day itself (up to 24 hours after start)
+      const next = FESTIVALS.find(f => {
+        const fDate = new Date(f.date);
+        const diff = fDate.getTime() - now.getTime();
+        return diff > -86400000; // remains active for 24 hours
+      });
+
+      if (next) {
+        setUpcomingFestival(next);
+        const targetDate = new Date(next.date);
+        const diff = targetDate.getTime() - now.getTime();
+
+        if (diff <= 0 && diff > -86400000) {
+          setTimeLeft({ days: 0, hours: 0, minutes: 0, seconds: 0, isToday: true });
+        } else if (diff > 0) {
+          const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+          const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+          const minutes = Math.floor((diff / 1000 / 60) % 60);
+          const seconds = Math.floor((diff / 1000) % 60);
+          setTimeLeft({ days, hours, minutes, seconds, isToday: false });
+        }
+      } else {
+        setUpcomingFestival(null);
+        setTimeLeft(null);
+      }
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Save teachers helper
   const saveTeachers = (updatedList: Teacher[]) => {
     setTeachers(updatedList);
@@ -335,10 +413,9 @@ export default function Home() {
     if (typeof window !== "undefined") {
       const isPredefined = ["1", "2", "3", "4", "5", "6"].includes(teacher.id);
       if (isPredefined) {
-        setPasswordTeacher(teacher);
-        setPasswordInput("");
-        setPasswordError(false);
-        setIsPasswordModalOpen(true);
+        setToastMessage("Sharing links for Guiding Lights is disabled.");
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 3000);
         return;
       }
 
@@ -1199,6 +1276,82 @@ export default function Home() {
         </div>
       </section>
 
+      {/* UPCOMING FESTIVAL REMINDER */}
+      {upcomingFestival && timeLeft && (
+        <section id="festival-reminder" className="py-8 px-6 max-w-4xl mx-auto z-10 relative">
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+            whileHover={{ y: -4, boxShadow: "0 12px 24px -10px rgba(180,83,9,0.12)" }}
+            className="relative bg-white/80 border border-amber-250/70 p-6 md:p-8 rounded-2xl shadow-3xs diary-page-curl overflow-hidden transition-all duration-300"
+          >
+            {/* Ambient decorative glowing backdrops */}
+            <div className="absolute -top-16 -right-16 w-36 h-36 bg-amber-100/30 rounded-full blur-2xl pointer-events-none" />
+            <div className="absolute -bottom-16 -left-16 w-36 h-36 bg-amber-200/20 rounded-full blur-2xl pointer-events-none" />
+
+            <div className="flex flex-col items-center text-center space-y-5 relative">
+              {/* Auspicious motif/header */}
+              <div className="flex items-center justify-center gap-3">
+                <span className="h-[1px] w-10 bg-amber-300/50" />
+                <div className="w-8 h-8 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 shadow-3xs animate-float">
+                  <Sparkles className="stroke-[1.25]" size={16} />
+                </div>
+                <span className="h-[1px] w-10 bg-amber-300/50" />
+              </div>
+
+              {/* Text Info */}
+              <div className="space-y-1.5 max-w-xl">
+                <span className="text-[9px] uppercase font-bold tracking-widest text-amber-500 block">Upcoming Celebration</span>
+                <h3 className="font-serif text-2xl md:text-3xl font-extrabold text-amber-955 flex items-center justify-center gap-2">
+                  <span>{upcomingFestival.name}</span>
+                  {upcomingFestival.nameHindi && (
+                    <>
+                      <span className="text-amber-300 text-base md:text-lg font-normal">•</span>
+                      <span className="font-serif text-xl md:text-2xl text-amber-800 font-medium">{upcomingFestival.nameHindi}</span>
+                    </>
+                  )}
+                </h3>
+                <p className="text-xs text-amber-900/70 leading-relaxed font-serif italic max-w-lg mx-auto">
+                  {upcomingFestival.description}
+                </p>
+              </div>
+
+              {/* Countdown or Celebration state */}
+              {timeLeft.isToday ? (
+                <div className="py-3.5 px-7 bg-amber-50/70 border border-amber-250/40 rounded-xl shadow-3xs animate-pulse">
+                  <span className="font-serif text-sm md:text-base font-extrabold text-amber-800 tracking-wide uppercase flex items-center gap-2">
+                    🙏 Celebrating Today! Happy {upcomingFestival.name} ✨
+                  </span>
+                </div>
+              ) : (
+                <div className="grid grid-cols-4 gap-2.5 sm:gap-4 max-w-sm w-full">
+                  {[
+                    { label: "Days", value: timeLeft.days },
+                    { label: "Hours", value: timeLeft.hours },
+                    { label: "Mins", value: timeLeft.minutes },
+                    { label: "Secs", value: timeLeft.seconds }
+                  ].map((unit, idx) => (
+                    <div
+                      key={idx}
+                      className="bg-amber-50/40 border border-amber-200/50 p-2 sm:p-3.5 rounded-xl flex flex-col items-center justify-center shadow-3xs transition-all hover:bg-amber-50/80 hover:border-amber-250/70 group"
+                    >
+                      <span className="font-serif text-lg sm:text-2xl font-extrabold text-amber-955 font-mono tracking-tight group-hover:scale-105 transition-transform duration-300">
+                        {String(unit.value).padStart(2, '0')}
+                      </span>
+                      <span className="text-[8px] sm:text-[9px] uppercase font-bold text-amber-600/80 tracking-wider mt-0.5">
+                        {unit.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </section>
+      )}
+
       {/* 3. TEACHERS GRID SECTION */}
       <section id="wall" className="py-24 px-6 max-w-7xl mx-auto z-10 relative">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
@@ -1310,13 +1463,15 @@ export default function Home() {
                       {teacher.years}
                     </span>
                     <div className="flex items-center gap-2">
-                      <button
-                        onClick={(e) => handleCopyLink(teacher, e)}
-                        title="Copy shareable link"
-                        className="p-1.5 rounded-md text-amber-600 hover:bg-amber-50 hover:text-amber-800 border border-transparent hover:border-amber-200 transition-all flex items-center justify-center"
-                      >
-                        {copiedId === teacher.id ? <CheckCircle2 size={13} className="text-green-600" /> : <Share2 size={13} />}
-                      </button>
+                      {!["1", "2", "3", "4", "5", "6"].includes(teacher.id) && (
+                        <button
+                          onClick={(e) => handleCopyLink(teacher, e)}
+                          title="Copy shareable link"
+                          className="p-1.5 rounded-md text-amber-600 hover:bg-amber-50 hover:text-amber-800 border border-transparent hover:border-amber-200 transition-all flex items-center justify-center"
+                        >
+                          {copiedId === teacher.id ? <CheckCircle2 size={13} className="text-green-600" /> : <Share2 size={13} />}
+                        </button>
+                      )}
                       <span className="font-semibold text-amber-600 hover:text-amber-800 transition-colors">
                         Read Detailed Story &rarr;
                       </span>
@@ -1432,22 +1587,24 @@ export default function Home() {
                   Back
                 </button>
 
-                <button
-                  onClick={() => handleCopyLink(activeTeacher)}
-                  className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-amber-750 hover:text-amber-900 border border-amber-200 bg-white rounded-md transition-all shadow-3xs"
-                >
-                  {copiedId === activeTeacher.id ? (
-                    <>
-                      <CheckCircle2 size={12} className="text-green-600" />
-                      Copied!
-                    </>
-                  ) : (
-                    <>
-                      <Share2 size={12} className="text-amber-600" />
-                      Copy Link
-                    </>
-                  )}
-                </button>
+                {!["1", "2", "3", "4", "5", "6"].includes(activeTeacher.id) && (
+                  <button
+                    onClick={() => handleCopyLink(activeTeacher)}
+                    className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-amber-750 hover:text-amber-900 border border-amber-200 bg-white rounded-md transition-all shadow-3xs"
+                  >
+                    {copiedId === activeTeacher.id ? (
+                      <>
+                        <CheckCircle2 size={12} className="text-green-600" />
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Share2 size={12} className="text-amber-600" />
+                        Copy Link
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
 
               <button
