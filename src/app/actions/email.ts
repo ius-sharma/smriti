@@ -154,3 +154,120 @@ export async function sendBlessingsEmail({
     return { success: false, error: err?.message || "Internal Server Error" };
   }
 }
+
+interface FestivalReminderParams {
+  name: string;
+  email: string;
+  festivalName: string;
+  festivalDate: string;
+  daysBefore: number;
+  isConfirmation?: boolean;
+}
+
+/**
+ * Sends a festival reminder or scheduling confirmation email to a user.
+ */
+export async function sendFestivalReminderEmail({
+  name,
+  email,
+  festivalName,
+  festivalDate,
+  daysBefore,
+  isConfirmation = false
+}: FestivalReminderParams) {
+  try {
+    const resend = getResendClient();
+    if (!resend) {
+      return { success: false, error: "API_KEY_MISSING" };
+    }
+
+    const readableDate = new Date(festivalDate).toLocaleDateString('en-IN', {
+      dateStyle: 'long',
+      timeZone: 'Asia/Kolkata'
+    });
+
+    let subject = "";
+    let htmlContent = "";
+
+    if (isConfirmation) {
+      subject = `Reminder Scheduled: ${festivalName} (via Smriti)`;
+      htmlContent = `
+        <div style="font-family: 'Playfair Display', Georgia, serif; background-color: #fffdf5; padding: 40px 20px; color: #1c150c;">
+          <div style="max-w: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #fde047; border-radius: 16px; padding: 32px; box-shadow: 0 4px 20px rgba(180,83,9,0.05);">
+            <h2 style="font-size: 24px; font-weight: bold; color: #78350f; border-bottom: 1px solid #fefce8; padding-bottom: 16px; margin-top: 0; text-align: center;">
+              Reminder Successfully Set!
+            </h2>
+            <p style="font-size: 16px; line-height: 1.6; color: #451a03;">
+              Namaste <strong>${name}</strong>,
+            </p>
+            <p style="font-size: 15px; line-height: 1.6; color: #451a03;">
+              You have successfully scheduled an email reminder for the upcoming auspicious festival:
+            </p>
+            <div style="background-color: #fffdf2; border-left: 3px solid #f59e0b; padding: 16px; margin: 20px 0; border-radius: 0 8px 8px 0;">
+              <h3 style="margin: 0 0 8px 0; color: #78350f; font-size: 18px;">${festivalName}</h3>
+              <p style="margin: 0; font-size: 14px; color: #92400e; line-height: 1.5;">
+                Festival Date: <strong>${readableDate}</strong>
+                <br/>
+                Trigger: <strong>${daysBefore === 0 ? "On the same day" : `${daysBefore} day(s) before`}</strong>
+              </p>
+            </div>
+            <p style="font-size: 14px; line-height: 1.6; color: #78350f;">
+              We will send you a reminder email when the trigger time arrives.
+            </p>
+            <div style="margin-top: 32px; border-top: 1px solid #fffdf5; padding-top: 16px; font-size: 11px; text-align: center; color: #b45309; text-transform: uppercase; letter-spacing: 0.05em;">
+              Smriti &copy; 2026 | Celebrating Culture & Mentorship
+            </div>
+          </div>
+        </div>
+      `;
+    } else {
+      subject = `Reminder: ${festivalName} is in ${daysBefore === 0 ? "today" : `${daysBefore} day(s)`}! 🙏`;
+      htmlContent = `
+        <div style="font-family: 'Playfair Display', Georgia, serif; background-color: #fffdf5; padding: 40px 20px; color: #1c150c;">
+          <div style="max-w: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #fde047; border-radius: 16px; padding: 32px; box-shadow: 0 4px 20px rgba(180,83,9,0.05);">
+            <h2 style="font-size: 24px; font-weight: bold; color: #78350f; border-bottom: 1px solid #fefce8; padding-bottom: 16px; margin-top: 0; text-align: center;">
+              Auspicious Celebration Reminder
+            </h2>
+            <p style="font-size: 16px; line-height: 1.6; color: #451a03;">
+              Namaste <strong>${name}</strong>,
+            </p>
+            <p style="font-size: 15px; line-height: 1.6; color: #451a03;">
+              This is your friendly reminder that the festival is fast approaching:
+            </p>
+            <div style="background-color: #fffdf2; border-left: 3px solid #f59e0b; padding: 16px; margin: 20px 0; border-radius: 0 8px 8px 0;">
+              <h3 style="margin: 0 0 8px 0; color: #78350f; font-size: 18px;">${festivalName}</h3>
+              <p style="margin: 0; font-size: 14px; color: #92400e; line-height: 1.5;">
+                Festival Date: <strong>${readableDate}</strong>
+                <br/>
+                Status: <strong>${daysBefore === 0 ? "Happening today!" : `Approaching in ${daysBefore} day(s)`}</strong>
+              </p>
+            </div>
+            <p style="font-size: 14px; line-height: 1.6; color: #78350f;">
+              Wishing you a joyous and blessed celebration!
+            </p>
+            <div style="margin-top: 32px; border-top: 1px solid #fffdf5; padding-top: 16px; font-size: 11px; text-align: center; color: #b45309; text-transform: uppercase; letter-spacing: 0.05em;">
+              Smriti &copy; 2026 | Celebrating Culture & Mentorship
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    const { data, error } = await resend.emails.send({
+      from: "Smriti Festival Reminder <onboarding@resend.dev>",
+      to: email,
+      subject: subject,
+      html: htmlContent
+    });
+
+    if (error) {
+      console.error("Resend API returned error for festival reminder:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data };
+  } catch (err: any) {
+    console.error("Server Action sendFestivalReminderEmail caught error:", err);
+    return { success: false, error: err?.message || "Internal Server Error" };
+  }
+}

@@ -26,11 +26,12 @@ import {
   Book,
   ArrowRight,
   Share2,
-  Lock
+  Lock,
+  Bell
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import { INITIAL_TEACHERS, Teacher } from "./data";
-import { sendThankYouEmail, sendBlessingsEmail } from "./actions/email";
+import { sendThankYouEmail, sendBlessingsEmail, sendFestivalReminderEmail } from "./actions/email";
 
 
 // Native Deflate compression/decompression helpers
@@ -122,6 +123,13 @@ export default function Home() {
   // Festival countdown states
   const [upcomingFestival, setUpcomingFestival] = useState<Festival | null>(null);
   const [timeLeft, setTimeLeft] = useState<{ days: number; hours: number; minutes: number; seconds: number; isToday: boolean } | null>(null);
+  
+  // Festival reminder states
+  const [isReminderModalOpen, setIsReminderModalOpen] = useState(false);
+  const [reminderName, setReminderName] = useState("");
+  const [reminderEmail, setReminderEmail] = useState("");
+  const [reminderDaysBefore, setReminderDaysBefore] = useState(1);
+  const [isSubmittingReminder, setIsSubmittingReminder] = useState(false);
   
   // Modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -387,6 +395,113 @@ export default function Home() {
     updateTimer();
     const interval = setInterval(updateTimer, 1000);
     return () => clearInterval(interval);
+  }, []);
+
+  // Submit handler for setting festival reminder
+  const handleSetReminderSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reminderName || !reminderEmail || !upcomingFestival) return;
+
+    setIsSubmittingReminder(true);
+    try {
+      // Call server action to send a confirmation email immediately
+      const result = await sendFestivalReminderEmail({
+        name: reminderName,
+        email: reminderEmail,
+        festivalName: upcomingFestival.name,
+        festivalDate: upcomingFestival.date,
+        daysBefore: reminderDaysBefore,
+        isConfirmation: true
+      });
+
+      if (result.success) {
+        // Save the scheduled reminder details in localStorage
+        const newReminder = {
+          id: `${upcomingFestival.name}-${Date.now()}`,
+          name: reminderName,
+          email: reminderEmail,
+          festivalName: upcomingFestival.name,
+          festivalDate: upcomingFestival.date,
+          daysBefore: reminderDaysBefore,
+          // Calculate the target trigger date (FestivalDate - daysBefore in ms)
+          triggerDate: new Date(new Date(upcomingFestival.date).getTime() - (reminderDaysBefore * 24 * 60 * 60 * 1000)).toISOString(),
+          sent: false
+        };
+
+        const existing = localStorage.getItem("smriti_festival_reminders");
+        const list = existing ? JSON.parse(existing) : [];
+        list.push(newReminder);
+        localStorage.setItem("smriti_festival_reminders", JSON.stringify(list));
+
+        setToastMessage(`Confirmation email sent to ${reminderEmail}!`);
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 4000);
+
+        // Reset and close
+        setIsReminderModalOpen(false);
+        setReminderName("");
+        setReminderEmail("");
+        setReminderDaysBefore(1);
+      } else {
+        setToastMessage("Failed to set reminder: " + (result.error || "unknown error"));
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 3000);
+      }
+    } catch (err) {
+      console.error(err);
+      setToastMessage("Failed to set reminder.");
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 3000);
+    } finally {
+      setIsSubmittingReminder(false);
+    }
+  };
+
+  // Check for due festival reminders in localStorage on load
+  useEffect(() => {
+    const checkReminders = async () => {
+      const saved = localStorage.getItem("smriti_festival_reminders");
+      if (!saved) return;
+
+      try {
+        const reminders = JSON.parse(saved);
+        const now = new Date();
+        let changed = false;
+
+        for (let i = 0; i < reminders.length; i++) {
+          const rem = reminders[i];
+          if (!rem.sent) {
+            const triggerDate = new Date(rem.triggerDate);
+            // If the current time is past the trigger date, send the reminder email!
+            if (now >= triggerDate) {
+              const res = await sendFestivalReminderEmail({
+                name: rem.name,
+                email: rem.email,
+                festivalName: rem.festivalName,
+                festivalDate: rem.festivalDate,
+                daysBefore: rem.daysBefore,
+                isConfirmation: false
+              });
+
+              if (res.success) {
+                rem.sent = true;
+                changed = true;
+              }
+            }
+          }
+        }
+
+        if (changed) {
+          localStorage.setItem("smriti_festival_reminders", JSON.stringify(reminders));
+        }
+      } catch (e) {
+        console.error("Error parsing or sending local reminders:", e);
+      }
+    };
+
+    // Run check after a short delay so it doesn't block critical page load hydration
+    const timer = setTimeout(checkReminders, 3000);
+    return () => clearTimeout(timer);
   }, []);
 
   // Save teachers helper
@@ -1326,26 +1441,36 @@ export default function Home() {
                   </span>
                 </div>
               ) : (
-                <div className="grid grid-cols-4 gap-2.5 sm:gap-4 max-w-sm w-full">
-                  {[
-                    { label: "Days", value: timeLeft.days },
-                    { label: "Hours", value: timeLeft.hours },
-                    { label: "Mins", value: timeLeft.minutes },
-                    { label: "Secs", value: timeLeft.seconds }
-                  ].map((unit, idx) => (
-                    <div
-                      key={idx}
-                      className="bg-amber-50/40 border border-amber-200/50 p-2 sm:p-3.5 rounded-xl flex flex-col items-center justify-center shadow-3xs transition-all hover:bg-amber-50/80 hover:border-amber-250/70 group"
-                    >
-                      <span className="font-serif text-lg sm:text-2xl font-extrabold text-amber-955 font-mono tracking-tight group-hover:scale-105 transition-transform duration-300">
-                        {String(unit.value).padStart(2, '0')}
-                      </span>
-                      <span className="text-[8px] sm:text-[9px] uppercase font-bold text-amber-600/80 tracking-wider mt-0.5">
-                        {unit.label}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                <>
+                  <div className="grid grid-cols-4 gap-2.5 sm:gap-4 max-w-sm w-full">
+                    {[
+                      { label: "Days", value: timeLeft.days },
+                      { label: "Hours", value: timeLeft.hours },
+                      { label: "Mins", value: timeLeft.minutes },
+                      { label: "Secs", value: timeLeft.seconds }
+                    ].map((unit, idx) => (
+                      <div
+                        key={idx}
+                        className="bg-amber-50/40 border border-amber-200/50 p-2 sm:p-3.5 rounded-xl flex flex-col items-center justify-center shadow-3xs transition-all hover:bg-amber-50/80 hover:border-amber-250/70 group"
+                      >
+                        <span className="font-serif text-lg sm:text-2xl font-extrabold text-amber-955 font-mono tracking-tight group-hover:scale-105 transition-transform duration-300">
+                          {String(unit.value).padStart(2, '0')}
+                        </span>
+                        <span className="text-[8px] sm:text-[9px] uppercase font-bold text-amber-600/80 tracking-wider mt-0.5">
+                          {unit.label}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={() => setIsReminderModalOpen(true)}
+                    className="mt-3 flex items-center gap-1.5 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-amber-900 border border-amber-200 bg-amber-50/20 hover:bg-amber-50 rounded-full shadow-3xs transition-colors duration-205 cursor-pointer"
+                  >
+                    <Bell size={12} className="text-amber-600 animate-bounce" />
+                    Set Email Reminder
+                  </button>
+                </>
               )}
             </div>
           </motion.div>
@@ -2319,6 +2444,99 @@ export default function Home() {
                     className="w-full py-2.5 bg-amber-800 hover:bg-amber-900 text-white font-bold text-xs uppercase tracking-wider rounded-lg transition-colors shadow-xs"
                   >
                     Verify & Copy
+                  </button>
+                </form>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* FESTIVAL REMINDER REGISTRATION MODAL */}
+      <AnimatePresence>
+        {isReminderModalOpen && upcomingFestival && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsReminderModalOpen(false)}
+              className="fixed inset-0 bg-amber-955/35 backdrop-blur-xs cursor-pointer"
+            />
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ type: "spring", duration: 0.4 }}
+              className="relative w-full max-w-sm bg-white border-2 border-amber-200 rounded-2xl shadow-2xl p-6 z-10 flex flex-col diary-page"
+            >
+              <button
+                onClick={() => setIsReminderModalOpen(false)}
+                className="absolute top-4 right-4 text-amber-800/60 hover:text-amber-955 transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+
+              <div className="space-y-4">
+                <div className="w-12 h-12 rounded-full bg-amber-50 flex items-center justify-center mx-auto text-amber-600 border border-amber-200">
+                  <Bell size={20} className="stroke-[1.5] animate-pulse" />
+                </div>
+
+                <div className="text-center space-y-1">
+                  <h3 className="font-serif text-lg font-bold text-amber-955">Set Festival Reminder</h3>
+                  <p className="text-xs text-amber-800/60 leading-normal px-2">
+                    Get an email notification for <strong className="text-amber-900">{upcomingFestival.name}</strong> before it begins.
+                  </p>
+                </div>
+
+                <form onSubmit={handleSetReminderSubmit} className="space-y-4 text-left">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-amber-800 mb-1">Your Name</label>
+                    <input
+                      type="text"
+                      required
+                      value={reminderName}
+                      onChange={(e) => setReminderName(e.target.value)}
+                      placeholder="e.g. Ayush Sharma"
+                      className="w-full px-3 py-2 text-xs border border-amber-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 focus:border-amber-400 rounded-lg text-amber-955 bg-[#fffdfa]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-amber-800 mb-1">Your Email</label>
+                    <input
+                      type="email"
+                      required
+                      value={reminderEmail}
+                      onChange={(e) => setReminderEmail(e.target.value)}
+                      placeholder="email@example.com"
+                      className="w-full px-3 py-2 text-xs border border-amber-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 focus:border-amber-400 rounded-lg text-amber-955 bg-[#fffdfa]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-amber-800 mb-1">When to remind me?</label>
+                    <select
+                      value={reminderDaysBefore}
+                      onChange={(e) => setReminderDaysBefore(Number(e.target.value))}
+                      className="w-full px-3 py-2 text-xs border border-amber-200 bg-[#fffdfa] focus:outline-hidden focus:ring-2 focus:ring-amber-400 focus:border-amber-400 rounded-lg text-amber-955 cursor-pointer"
+                    >
+                      <option value={0}>On the same day</option>
+                      <option value={1}>1 day before</option>
+                      <option value={2}>2 days before</option>
+                      <option value={3}>3 days before</option>
+                      <option value={5}>5 days before</option>
+                      <option value={7}>7 days before</option>
+                    </select>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isSubmittingReminder}
+                    className="w-full py-2.5 bg-amber-800 hover:bg-amber-900 text-white font-bold text-xs uppercase tracking-wider rounded-lg transition-colors shadow-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    {isSubmittingReminder ? "Scheduling..." : "Schedule Reminder"}
                   </button>
                 </form>
               </div>
