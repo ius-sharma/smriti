@@ -137,9 +137,9 @@ export default function GalleriesPage() {
 
       {/* STICKY HEADER */}
       <header className="sticky top-0 z-40 bg-[#fffdf5]/85 backdrop-blur-md px-6 py-4 border-b border-amber-200 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="font-serif text-xl font-bold tracking-wide text-amber-955">Smriti</span>
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200 uppercase font-bold tracking-wider">Galleries</span>
+        <div className="flex items-center gap-1.5">
+          <span className="font-serif text-xl font-black tracking-wide text-amber-955">Smriti</span>
+          <span className="font-serif text-xl font-normal tracking-wide text-amber-800/85 italic">Galleries</span>
         </div>
 
         <button

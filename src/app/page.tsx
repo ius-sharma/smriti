@@ -1846,9 +1846,9 @@ using this Edit Key from the Student Galleries panel.
 
         {/* Dynamic header */}
         <header className={`sticky top-0 z-40 ${bgClass}/80 backdrop-blur-md px-6 py-4 border-b ${borderClass} flex items-center justify-between`}>
-          <div className="flex items-center gap-2">
-            <span className={`font-serif text-xl font-bold tracking-wide ${textColorClass}`}>Smriti</span>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200 uppercase font-bold tracking-wider">Student Wall</span>
+          <div className="flex items-center gap-1.5">
+            <span className={`font-serif text-xl font-black tracking-wide ${textColorClass}`}>Smriti</span>
+            <span className={`font-serif text-xl font-normal tracking-wide ${textColorClass} opacity-75 italic`}>Student Wall</span>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -1889,7 +1889,7 @@ using this Edit Key from the Student Galleries panel.
 
             {/* Owner management controls centered under subtitle */}
             <div className="flex items-center justify-center gap-2 pt-2">
-              {!isOwnershipVerified ? (
+              {!isOwnershipVerified && loadedWall.creatorName !== "Ayush Sharma" ? (
                 <button
                   onClick={() => {
                     setClaimEditKeyInput("");
@@ -1902,7 +1902,7 @@ using this Edit Key from the Student Galleries panel.
                   <User size={12} className="text-amber-600" />
                   <span>Claim Wall Controls</span>
                 </button>
-              ) : (
+              ) : isOwnershipVerified ? (
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleEditWallClick}
@@ -1917,7 +1917,7 @@ using this Edit Key from the Student Galleries panel.
                     <span>Delete Wall</span>
                   </button>
                 </div>
-              )}
+              ) : null}
             </div>
 
             <div className="h-0.5 w-16 bg-amber-300 mx-auto mt-6" />

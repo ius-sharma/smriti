@@ -361,12 +361,12 @@ export default function AdminPage() {
               <p className="text-xs text-amber-800/50">Manage custom tribute walls, verify edit keys, and audit database content.</p>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
+            <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
               <button
                 type="button"
                 onClick={handleSeedAdminWall}
                 disabled={isSeeding}
-                className="flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs font-bold uppercase tracking-wider rounded-xl bg-amber-800 hover:bg-amber-900 text-white cursor-pointer transition-colors shadow-2xs disabled:opacity-50"
+                className="flex items-center justify-center gap-1.5 px-8 h-10 min-w-[200px] text-xs font-bold uppercase tracking-wider rounded-xl bg-amber-800 hover:bg-amber-900 text-white cursor-pointer transition-colors shadow-2xs disabled:opacity-50"
               >
                 <Sparkles size={13} className="text-amber-200" />
                 <span>{isSeeding ? "Seeding..." : "Seed Admin's Wall"}</span>
@@ -374,13 +374,13 @@ export default function AdminPage() {
 
               {/* Registry Search */}
               <div className="relative w-full md:max-w-xs">
-                <Search size={14} className="absolute left-3 top-3.5 text-amber-800/40 pointer-events-none" />
+                <Search size={14} className="absolute left-3 top-[13px] text-amber-800/40 pointer-events-none" />
                 <input
                   type="text"
                   placeholder="Search by Title, Creator or ID..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2.5 text-xs border border-amber-200 bg-white rounded-xl text-amber-955 placeholder:text-amber-800/35 focus:outline-hidden"
+                  className="w-full pl-9 pr-4 h-10 text-xs border border-amber-200 bg-white rounded-xl text-amber-955 placeholder:text-amber-800/35 focus:outline-hidden"
                 />
               </div>
             </div>

@@ -1,7 +1,7 @@
 "use server";
 
 import { supabase } from "../lib/supabase";
-import { Teacher } from "../data";
+import { Teacher, INITIAL_TEACHERS } from "../data";
 
 interface CreateWallParams {
   creatorName: string;
@@ -424,8 +424,8 @@ export async function seedAdminWall(email: string, pass: string) {
     const { data, error } = await supabase
       .from("tribute_walls")
       .insert({
-        creator_name: "Admin",
-        title: "Admin's Favorite Tribute Wall",
+        creator_name: "Ayush Sharma",
+        title: "Ayush Sharma's Favorite Tribute Wall",
         theme: "amber",
         visibility: "public",
         tributes: INITIAL_TEACHERS,
