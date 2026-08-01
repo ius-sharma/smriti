@@ -32,6 +32,13 @@ import {
 import confetti from "canvas-confetti";
 import { INITIAL_TEACHERS, Teacher } from "./data";
 import { sendThankYouEmail, sendBlessingsEmail, sendFestivalReminderEmail } from "./actions/email";
+import { 
+  createTributeWall, 
+  getTributeWallMetadata, 
+  unlockTributeWall, 
+  getPublicTributeWallTributes, 
+  getPublicTributeWalls 
+} from "./actions/wall";
 
 
 // Native Deflate compression/decompression helpers
@@ -130,6 +137,44 @@ export default function Home() {
   const [reminderEmail, setReminderEmail] = useState("");
   const [reminderDaysBefore, setReminderDaysBefore] = useState(1);
   const [isSubmittingReminder, setIsSubmittingReminder] = useState(false);
+
+  // Tribute Wall Builder states
+  const [isWallBuilderOpen, setIsWallBuilderOpen] = useState(false);
+  const [wallCreatorName, setWallCreatorName] = useState("");
+  const [wallTitle, setWallTitle] = useState("");
+  const [wallTheme, setWallTheme] = useState("amber"); // "amber", "emerald", "royal", "mystic"
+  const [wallVisibility, setWallVisibility] = useState("public"); // "public", "private", "password"
+  const [wallPassword, setWallPassword] = useState("");
+  const [selectedTeacherIds, setSelectedTeacherIds] = useState<string[]>([]);
+  const [isGeneratingWall, setIsGeneratingWall] = useState(false);
+  const [createdWallLink, setCreatedWallLink] = useState("");
+
+  // Loaded Tribute Wall states
+  const [loadedWall, setLoadedWall] = useState<{
+    id: string;
+    creatorName: string;
+    title: string;
+    theme: string;
+    visibility: string;
+    tributes: Teacher[];
+  } | null>(null);
+  const [wallMetadata, setWallMetadata] = useState<{
+    id: string;
+    creatorName: string;
+    title: string;
+    theme: string;
+    visibility: string;
+    isLocked: boolean;
+  } | null>(null);
+  const [isUnlockingWall, setIsUnlockingWall] = useState(false);
+  const [wallPasswordInput, setWallPasswordInput] = useState("");
+  const [wallPasswordError, setWallPasswordError] = useState(false);
+  const [isLoadingWall, setIsLoadingWall] = useState(false);
+
+  // Gallery states
+  const [isGalleryOpen, setIsGalleryOpen] = useState(false);
+  const [galleryWalls, setGalleryWalls] = useState<any[]>([]);
+  const [isLoadingGallery, setIsLoadingGallery] = useState(false);
   
   // Modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -230,9 +275,42 @@ export default function Home() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
+      const wallId = params.get("wall");
       const teacherSlug = params.get("teacher")?.toLowerCase();
       
-      if (teacherSlug) {
+      if (wallId) {
+        setIsLoadingWall(true);
+        getTributeWallMetadata(wallId).then((res) => {
+          if (res.success && res.wall) {
+            setWallMetadata(res.wall);
+            if (res.wall.visibility === "public") {
+              getPublicTributeWallTributes(wallId).then((tribRes) => {
+                if (tribRes.success && tribRes.tributes) {
+                  setLoadedWall({
+                    id: res.wall.id,
+                    creatorName: res.wall.creatorName,
+                    title: res.wall.title,
+                    theme: res.wall.theme,
+                    visibility: res.wall.visibility,
+                    tributes: tribRes.tributes
+                  });
+                }
+                setIsLoadingWall(false);
+              });
+            } else {
+              // Password locked
+              setIsLoadingWall(false);
+            }
+          } else {
+            setIsLoadingWall(false);
+            setToastMessage("Tribute Wall not found.");
+            setShowToast(true);
+            setTimeout(() => setShowToast(false), 3000);
+          }
+        }).catch(() => {
+          setIsLoadingWall(false);
+        });
+      } else if (teacherSlug) {
         const slugMap: { [key: string]: string } = {
           "paras": "1",
           "reshma": "2",
@@ -503,6 +581,132 @@ export default function Home() {
     const timer = setTimeout(checkReminders, 3000);
     return () => clearTimeout(timer);
   }, []);
+
+  // Submit handler for creating a new custom tribute wall
+  const handleCreateWallSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!wallCreatorName || !wallTitle || selectedTeacherIds.length === 0) {
+      setToastMessage("Please fill in all fields and select at least one teacher.");
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 3000);
+      return;
+    }
+
+    setIsGeneratingWall(true);
+    try {
+      // Filter out the selected teachers from our list
+      const tributesToSave = teachers
+        .filter(t => selectedTeacherIds.includes(t.id))
+        .map(t => ({
+          name: t.name,
+          salutation: t.salutation,
+          subject: t.subject,
+          designation: t.designation,
+          college: t.college,
+          years: t.years,
+          photo: t.photo || "",
+          bestAdvice: t.bestAdvice,
+          favoriteMemory: t.favoriteMemory,
+          teachingStyle: t.teachingStyle,
+          personality: t.personality,
+          lifeLesson: t.lifeLesson,
+          howTheyShaped: t.howTheyShaped,
+          skillsLearned: t.skillsLearned,
+          favoriteSaying: t.favoriteSaying,
+          contactEmail: t.contactEmail,
+          initials: t.initials,
+          avatarColor: t.avatarColor,
+          bgPattern: t.bgPattern
+        }));
+
+      const res = await createTributeWall({
+        creatorName: wallCreatorName,
+        title: wallTitle,
+        theme: wallTheme,
+        visibility: wallVisibility,
+        password: wallVisibility === "password" ? wallPassword : undefined,
+        tributes: tributesToSave
+      });
+
+      if (res.success && res.id) {
+        const link = `${window.location.origin}?wall=${res.id}`;
+        setCreatedWallLink(link);
+        
+        // Add to creator's local storage list of owned walls
+        const existing = localStorage.getItem("smriti_my_walls");
+        const list = existing ? JSON.parse(existing) : [];
+        list.push({ id: res.id, title: wallTitle, creatorName: wallCreatorName, theme: wallTheme });
+        localStorage.setItem("smriti_my_walls", JSON.stringify(list));
+
+        setToastMessage("Tribute Wall created successfully!");
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 3000);
+      } else {
+        setToastMessage("Error creating wall: " + (res.error || "unknown error"));
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 3000);
+      }
+    } catch (err) {
+      console.error(err);
+      setToastMessage("An error occurred while creating the wall.");
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 3000);
+    } finally {
+      setIsGeneratingWall(false);
+    }
+  };
+
+  // Submit handler for unlocking a password-protected tribute wall
+  const handleUnlockWallSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!wallMetadata || !wallPasswordInput) return;
+
+    setIsUnlockingWall(true);
+    setWallPasswordError(false);
+    try {
+      const res = await unlockTributeWall(wallMetadata.id, wallPasswordInput);
+      if (res.success && res.tributes) {
+        setLoadedWall({
+          id: wallMetadata.id,
+          creatorName: wallMetadata.creatorName,
+          title: wallMetadata.title,
+          theme: wallMetadata.theme,
+          visibility: wallMetadata.visibility,
+          tributes: res.tributes
+        });
+        setWallPasswordInput("");
+        setWallPasswordError(false);
+      } else {
+        setWallPasswordError(true);
+      }
+    } catch (err) {
+      console.error(err);
+      setToastMessage("Failed to verify passcode.");
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 3000);
+    } finally {
+      setIsUnlockingWall(false);
+    }
+  };
+
+  // Loads public walls list for the gallery modal
+  const loadPublicWalls = async () => {
+    setIsLoadingGallery(true);
+    try {
+      const res = await getPublicTributeWalls();
+      if (res.success && res.walls) {
+        setGalleryWalls(res.walls);
+      } else {
+        setToastMessage("Failed to fetch gallery walls.");
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 3000);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoadingGallery(false);
+    }
+  };
 
   // Save teachers helper
   const saveTeachers = (updatedList: Teacher[]) => {
@@ -1271,6 +1475,252 @@ export default function Home() {
     );
   }
 
+  // RENDER CUSTOM LOADED STUDENT TRIBUTE WALL
+  if (loadedWall) {
+    // Determine theme classes
+    let bgClass = "bg-[#fffdf5]";
+    let textColorClass = "text-amber-955";
+    let subTextColorClass = "text-amber-800/75";
+    let accentClass = "bg-amber-800 hover:bg-amber-900 text-white";
+    let borderClass = "border-amber-250";
+    let cardClass = "bg-white border-amber-100 hover:border-amber-250 text-amber-955";
+
+    if (loadedWall.theme === "emerald") {
+      bgClass = "bg-[#f4fbf7]";
+      textColorClass = "text-emerald-950";
+      subTextColorClass = "text-emerald-800/75";
+      accentClass = "bg-emerald-850 hover:bg-emerald-900 text-white";
+      borderClass = "border-emerald-250";
+      cardClass = "bg-white border-emerald-100 hover:border-emerald-250 text-emerald-950";
+    } else if (loadedWall.theme === "royal") {
+      bgClass = "bg-[#faf9ff]";
+      textColorClass = "text-indigo-950";
+      subTextColorClass = "text-indigo-800/75";
+      accentClass = "bg-indigo-850 hover:bg-indigo-900 text-white";
+      borderClass = "border-indigo-250";
+      cardClass = "bg-white border-indigo-100 hover:border-indigo-250 text-indigo-955";
+    } else if (loadedWall.theme === "mystic") {
+      bgClass = "bg-neutral-900";
+      textColorClass = "text-neutral-50";
+      subTextColorClass = "text-neutral-400";
+      accentClass = "bg-amber-500 hover:bg-amber-600 text-neutral-950";
+      borderClass = "border-neutral-800";
+      cardClass = "bg-neutral-800 border-neutral-750 hover:border-amber-500/50 text-neutral-100";
+    }
+
+    return (
+      <div className={`relative min-h-screen ${bgClass} overflow-hidden font-sans selection:bg-amber-200 selection:text-amber-900`}>
+        {/* Glow decoration */}
+        <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden opacity-20">
+          <div className="absolute top-[10%] left-[5%] w-[40rem] h-[40rem] bg-[radial-gradient(circle,#fefce8_0%,transparent_70%)] animate-glow" />
+        </div>
+
+        {/* Dynamic header */}
+        <header className={`sticky top-0 z-40 ${bgClass}/80 backdrop-blur-md px-6 py-4 border-b ${borderClass} flex items-center justify-between`}>
+          <div className="flex items-center gap-2">
+            <span className={`font-serif text-xl font-bold tracking-wide ${textColorClass}`}>Smriti</span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200 uppercase font-bold tracking-wider">Student Wall</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                // Return to main wall
+                const url = new URL(window.location.href);
+                url.searchParams.delete("wall");
+                window.history.replaceState({}, "", url.toString());
+                setLoadedWall(null);
+                setWallMetadata(null);
+              }}
+              className={`flex items-center gap-1 px-3.5 py-1.5 text-xs font-semibold rounded-lg border transition-all ${accentClass} cursor-pointer`}
+            >
+              <ArrowLeft size={13} />
+              Main Tribute Wall
+            </button>
+          </div>
+        </header>
+
+        {/* Custom Wall Content */}
+        <main className="relative z-10 max-w-7xl mx-auto py-16 px-6 space-y-12">
+          {/* Wall Cover Banner */}
+          <div className="text-center space-y-4 max-w-2xl mx-auto py-8">
+            <div className="flex items-center justify-center gap-2">
+              <span className="h-[1px] w-8 bg-amber-300" />
+              <span className="text-[10px] uppercase font-bold tracking-widest text-amber-500 font-sans">Student Tribute Space</span>
+              <span className="h-[1px] w-8 bg-amber-300" />
+            </div>
+            
+            <div className="space-y-2">
+              <h1 className={`font-serif text-4xl md:text-6xl font-extrabold tracking-tight ${textColorClass}`}>
+                {loadedWall.title}
+              </h1>
+              <p className={`font-serif text-md md:text-xl ${subTextColorClass} tracking-wide italic`}>
+                Curated with respect & gratitude by <strong className={`${textColorClass}`}>{loadedWall.creatorName}</strong>
+              </p>
+            </div>
+            <div className="h-0.5 w-16 bg-amber-300 mx-auto mt-6" />
+          </div>
+
+          {/* Wall Grid of Tributes */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {loadedWall.tributes.map((teacher, index) => (
+              <motion.div
+                key={teacher.id || index}
+                layout
+                initial={{ opacity: 0, y: 15 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                whileHover={{ y: -5, boxShadow: "0 10px 25px -8px rgba(180,83,9,0.12)" }}
+                onClick={() => {
+                  setActiveTeacher(teacher);
+                  setIsThankYouFormOpen(false);
+                }}
+                className={`${cardClass} p-6 rounded-xl cursor-pointer transition-all duration-300 flex flex-col justify-between diary-page-curl group shadow-2xs`}
+              >
+                <div>
+                  <div className="flex items-center gap-4 mb-5">
+                    <div className="relative w-14 h-14 rounded-full overflow-hidden border border-amber-200 bg-linear-to-br from-amber-50 to-amber-150 flex items-center justify-center font-serif text-lg font-bold text-amber-900 shadow-2xs">
+                      {teacher.photo ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={teacher.photo}
+                          alt={teacher.name}
+                          className="w-full h-full object-cover relative z-10"
+                          onError={(e) => { e.currentTarget.style.display = "none"; }}
+                        />
+                      ) : null}
+                      <div className={`absolute inset-0 opacity-10 ${teacher.bgPattern}`} />
+                      <span className="absolute z-0">{teacher.initials}</span>
+                    </div>
+                    
+                    <div>
+                      <h3 className={`font-serif text-base font-bold transition-colors group-hover:text-amber-600`}>
+                        {teacher.name}
+                      </h3>
+                      <span className="inline-block px-2 py-0.5 mt-0.5 text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200/50 rounded-full uppercase tracking-wider">
+                        {teacher.subject}
+                      </span>
+                    </div>
+                  </div>
+
+                  <blockquote className="border-l border-amber-300 pl-3.5 py-0.5 mb-6">
+                    <p className={`font-serif text-xs italic leading-relaxed ${loadedWall.theme === "mystic" ? "text-neutral-300" : "text-amber-850"}`}>
+                      &ldquo;{teacher.bestAdvice}&rdquo;
+                    </p>
+                  </blockquote>
+                </div>
+
+                {/* Card Footer */}
+                <div className="flex items-center justify-between text-[11px] pt-3.5 border-t border-amber-50/20">
+                  <span className="opacity-50 font-medium flex items-center gap-1">
+                    <Clock size={11} />
+                    {teacher.years}
+                  </span>
+                  <span className="font-semibold text-amber-500 group-hover:text-amber-600 transition-colors">
+                    Read Detailed Story &rarr;
+                  </span>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // RENDER PASSWORD LOCKSCREEN FOR PROTECTED CUSTOM WALLS
+  if (wallMetadata && wallMetadata.isLocked && !loadedWall) {
+    let bgClass = "bg-[#fffdf5]";
+    let textColorClass = "text-amber-955";
+    let borderClass = "border-amber-200";
+
+    if (wallMetadata.theme === "emerald") {
+      bgClass = "bg-[#f4fbf7]";
+      textColorClass = "text-emerald-950";
+      borderClass = "border-emerald-250";
+    } else if (wallMetadata.theme === "royal") {
+      bgClass = "bg-[#faf9ff]";
+      textColorClass = "text-indigo-950";
+      borderClass = "border-indigo-250";
+    } else if (wallMetadata.theme === "mystic") {
+      bgClass = "bg-neutral-900";
+      textColorClass = "text-neutral-50";
+      borderClass = "border-neutral-800";
+    }
+
+    return (
+      <div className={`relative min-h-screen ${bgClass} flex items-center justify-center p-6 overflow-hidden font-sans`}>
+        {/* Glow decoration */}
+        <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden opacity-20">
+          <div className="absolute top-[10%] left-[5%] w-[40rem] h-[40rem] bg-[radial-gradient(circle,#fefce8_0%,transparent_70%)] animate-glow" />
+        </div>
+
+        <motion.div
+          initial={{ opacity: 0, scale: 0.96, y: 15 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          className={`relative w-full max-w-sm bg-white border-2 ${borderClass} rounded-2xl shadow-2xl p-8 z-10 flex flex-col text-center space-y-6 diary-page-curl`}
+        >
+          <div className="w-14 h-14 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center mx-auto text-amber-600 shadow-2xs">
+            <Lock size={24} className="stroke-[1.5]" />
+          </div>
+
+          <div className="space-y-2">
+            <span className="text-[10px] uppercase font-bold tracking-widest text-amber-500">Restricted Access</span>
+            <h3 className={`font-serif text-2xl font-extrabold ${textColorClass}`}>{wallMetadata.title}</h3>
+            <p className="text-xs text-amber-800/60 leading-normal px-2">
+              This Tribute Wall created by <strong className="text-amber-900">{wallMetadata.creatorName}</strong> is password protected. Enter the passcode to access.
+            </p>
+          </div>
+
+          <form onSubmit={handleUnlockWallSubmit} className="space-y-4 pt-2">
+            <div className="space-y-1">
+              <input
+                type="password"
+                required
+                value={wallPasswordInput}
+                onChange={(e) => {
+                  setWallPasswordInput(e.target.value);
+                  if (wallPasswordError) setWallPasswordError(false);
+                }}
+                placeholder="Enter passcode..."
+                className={`w-full px-4 py-2.5 text-center font-mono border rounded-lg text-sm bg-[#fffdfa] text-amber-955 placeholder:text-amber-800/30 focus:outline-hidden focus:ring-2 focus:ring-amber-400 ${
+                  wallPasswordError ? "border-red-400" : "border-amber-200"
+                }`}
+                autoFocus
+              />
+              {wallPasswordError && (
+                <p className="text-[10px] text-red-600 font-semibold mt-1">
+                  Incorrect passcode! Please try again.
+                </p>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <button
+                type="submit"
+                disabled={isUnlockingWall}
+                className="w-full py-2.5 bg-amber-800 hover:bg-amber-900 text-white font-bold text-xs uppercase tracking-widest rounded-lg transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
+              >
+                {isUnlockingWall ? "Unlocking..." : "Unlock Wall"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const url = new URL(window.location.href);
+                  url.searchParams.delete("wall");
+                  window.history.replaceState({}, "", url.toString());
+                  setWallMetadata(null);
+                }}
+                className="w-full py-2 text-xs font-semibold text-amber-700 hover:underline cursor-pointer"
+              >
+                Back to Home
+              </button>
+            </div>
+          </form>
+        </motion.div>
+      </div>
+    );
+  }
+
   // PUBLIC TRIBUTE WALL
   return (
     <div className="relative min-h-screen bg-[#fffdf5] selection:bg-amber-200 selection:text-amber-900 overflow-hidden font-sans">
@@ -1295,10 +1745,34 @@ export default function Home() {
             <a href="#wall" className="hover:text-amber-600 transition-colors">The Guiding Lights</a>
           </nav>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => {
+                loadPublicWalls();
+                setIsGalleryOpen(true);
+              }}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-amber-800 hover:text-amber-950 transition-colors cursor-pointer"
+              title="View other student walls"
+            >
+              <BookOpenCheck size={14} className="text-amber-600" />
+              <span className="hidden sm:inline">Student Galleries</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setSelectedTeacherIds([]);
+                setCreatedWallLink("");
+                setIsWallBuilderOpen(true);
+              }}
+              className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-amber-900 border border-amber-250 bg-amber-50/20 hover:bg-amber-50 rounded-full shadow-3xs transition-colors duration-205 cursor-pointer"
+            >
+              <Plus size={12} className="text-amber-700" />
+              Build Your Wall
+            </button>
+
             <button
               onClick={() => setIsCustomModalOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-amber-900 border border-amber-250 bg-amber-50/20 hover:bg-amber-50 rounded-full shadow-3xs transition-colors duration-205"
+              className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-white bg-amber-800 hover:bg-amber-950 rounded-full shadow-3xs transition-colors duration-205 cursor-pointer"
             >
               Wish Your Teacher
             </button>
@@ -2539,6 +3013,326 @@ export default function Home() {
                     {isSubmittingReminder ? "Scheduling..." : "Schedule Reminder"}
                   </button>
                 </form>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* TRIBUTE WALL BUILDER MODAL */}
+      <AnimatePresence>
+        {isWallBuilderOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto" role="dialog" aria-modal="true">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsWallBuilderOpen(false)}
+              className="fixed inset-0 bg-amber-955/30 backdrop-blur-xs cursor-pointer"
+            />
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 15 }}
+              transition={{ type: "spring", duration: 0.45 }}
+              className="relative w-full max-w-lg bg-white border border-amber-200 rounded-2xl shadow-2xl overflow-hidden z-10 flex flex-col my-8 max-h-[85vh] focus:outline-hidden"
+            >
+              <button
+                onClick={() => setIsWallBuilderOpen(false)}
+                className="absolute top-4 right-4 text-amber-800/50 hover:text-amber-955 transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+
+              <div className="overflow-y-auto p-6 md:p-8 space-y-6 scroll-smooth">
+                <div className="text-center space-y-1 pb-2 border-b border-amber-50">
+                  <h3 className="font-serif text-2xl font-extrabold text-amber-955">Create Your Tribute Wall</h3>
+                  <p className="text-xs text-amber-800/60 leading-normal">
+                    Bundle your favorite teacher tributes into a personalized wall space.
+                  </p>
+                </div>
+
+                {createdWallLink ? (
+                  /* Success Screen */
+                  <div className="text-center space-y-4 py-6">
+                    <div className="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-250 flex items-center justify-center mx-auto text-emerald-600 shadow-2xs">
+                      <Sparkles size={22} className="animate-pulse" />
+                    </div>
+                    <div className="space-y-1">
+                      <h4 className="font-serif text-lg font-bold text-emerald-900">Your Wall is Live!</h4>
+                      <p className="text-xs text-emerald-800/70">
+                        Share this link with your friends, classmates, or teachers:
+                      </p>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={createdWallLink}
+                        onClick={(e) => e.currentTarget.select()}
+                        className="flex-1 px-3 py-2 text-xs border border-emerald-200 bg-white rounded-lg text-emerald-900 font-mono select-all truncate focus:outline-hidden"
+                      />
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(createdWallLink);
+                          setToastMessage("Wall link copied!");
+                          setShowToast(true);
+                          setTimeout(() => setShowToast(false), 2000);
+                        }}
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider rounded-lg transition-colors cursor-pointer"
+                      >
+                        Copy
+                      </button>
+                    </div>
+
+                    <div className="pt-4 flex justify-center gap-2">
+                      <a
+                        href={createdWallLink}
+                        className="px-4 py-2 border border-amber-250 text-amber-900 bg-amber-50/20 hover:bg-amber-50 text-xs font-bold uppercase tracking-wider rounded-lg transition-all"
+                      >
+                        View Wall Now
+                      </a>
+                      <button
+                        onClick={() => setCreatedWallLink("")}
+                        className="px-4 py-2 text-xs font-semibold text-amber-700 hover:underline cursor-pointer"
+                      >
+                        Create Another
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* Form Form */
+                  <form onSubmit={handleCreateWallSubmit} className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase text-amber-800 mb-1">Your Name *</label>
+                        <input
+                          type="text"
+                          required
+                          value={wallCreatorName}
+                          onChange={(e) => setWallCreatorName(e.target.value)}
+                          placeholder="e.g. Ayush Sharma"
+                          className="w-full px-3 py-2 text-xs border border-amber-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 focus:border-amber-400 rounded-lg text-amber-955 bg-[#fffdfa]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase text-amber-800 mb-1">Wall Title *</label>
+                        <input
+                          type="text"
+                          required
+                          value={wallTitle}
+                          onChange={(e) => setWallTitle(e.target.value)}
+                          placeholder="e.g. My Mentors"
+                          className="w-full px-3 py-2 text-xs border border-amber-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 focus:border-amber-400 rounded-lg text-amber-955 bg-[#fffdfa]"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase text-amber-800 mb-1">Select Theme *</label>
+                        <select
+                          value={wallTheme}
+                          onChange={(e) => setWallTheme(e.target.value)}
+                          className="w-full px-3 py-2 text-xs border border-amber-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 focus:border-amber-400 rounded-lg text-amber-955 bg-white cursor-pointer"
+                        >
+                          <option value="amber">Amber Parchment (Classic)</option>
+                          <option value="emerald">Emerald Forest (Calm)</option>
+                          <option value="royal">Royal Velvet (Premium)</option>
+                          <option value="mystic">Mystic Charcoal (Dark)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase text-amber-800 mb-1">Visibility / Access *</label>
+                        <select
+                          value={wallVisibility}
+                          onChange={(e) => setWallVisibility(e.target.value)}
+                          className="w-full px-3 py-2 text-xs border border-amber-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 focus:border-amber-400 rounded-lg text-amber-955 bg-white cursor-pointer"
+                        >
+                          <option value="public">Public (Visible in gallery)</option>
+                          <option value="private">Private (Unlisted, link sharing only)</option>
+                          <option value="password">Password Protected (Protected by passcode)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {wallVisibility === "password" && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        className="space-y-1"
+                      >
+                        <label className="block text-[10px] font-bold uppercase text-amber-800 mb-1">Set Passcode *</label>
+                        <input
+                          type="password"
+                          required
+                          value={wallPassword}
+                          onChange={(e) => setWallPassword(e.target.value)}
+                          placeholder="Create passcode (e.g. 123456)"
+                          className="w-full px-3 py-2 text-xs border border-amber-250 focus:outline-hidden focus:ring-2 focus:ring-amber-400 focus:border-amber-400 rounded-lg text-amber-955 bg-[#fffdfa] font-mono"
+                        />
+                      </motion.div>
+                    )}
+
+                    <div className="space-y-2">
+                      <label className="block text-[10px] font-bold uppercase text-amber-800">
+                        Choose Teachers to Include * <span className="text-[9px] text-amber-600/80 font-normal lowercase">(Select at least one)</span>
+                      </label>
+                      
+                      <div className="border border-amber-100 rounded-xl max-h-[180px] overflow-y-auto p-3 bg-amber-50/10 space-y-2">
+                        {teachers.map(teacher => {
+                          const isSelected = selectedTeacherIds.includes(teacher.id);
+                          return (
+                            <label
+                              key={teacher.id}
+                              className={`flex items-center gap-2.5 p-2 rounded-lg border text-xs cursor-pointer transition-all ${
+                                isSelected 
+                                  ? "border-amber-400 bg-amber-50/50 text-amber-900 font-bold" 
+                                  : "border-transparent bg-white/40 text-amber-900/70 hover:bg-white"
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => {
+                                  if (isSelected) {
+                                    setSelectedTeacherIds(selectedTeacherIds.filter(id => id !== teacher.id));
+                                  } else {
+                                    setSelectedTeacherIds([...selectedTeacherIds, teacher.id]);
+                                  }
+                                }}
+                                className="accent-amber-700 cursor-pointer"
+                              />
+                              <div className="flex-1 flex justify-between items-center">
+                                <span>{teacher.name}</span>
+                                <span className="text-[10px] opacity-75 font-normal px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200/50">{teacher.subject}</span>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isGeneratingWall}
+                      className="w-full py-3 bg-amber-850 hover:bg-amber-900 text-white font-bold text-xs uppercase tracking-widest rounded-lg transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      {isGeneratingWall ? "Generating Wall..." : "Generate Wall Link"}
+                    </button>
+                  </form>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* PUBLIC TRIBUTE WALLS GALLERY */}
+      <AnimatePresence>
+        {isGalleryOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto" role="dialog" aria-modal="true">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsGalleryOpen(false)}
+              className="fixed inset-0 bg-amber-955/30 backdrop-blur-xs cursor-pointer"
+            />
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 15 }}
+              transition={{ type: "spring", duration: 0.45 }}
+              className="relative w-full max-w-lg bg-white border border-amber-200 rounded-2xl shadow-2xl overflow-hidden z-10 flex flex-col my-8 max-h-[85vh] focus:outline-hidden"
+            >
+              <button
+                onClick={() => setIsGalleryOpen(false)}
+                className="absolute top-4 right-4 text-amber-800/50 hover:text-amber-955 transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+
+              <div className="overflow-y-auto p-6 md:p-8 space-y-6 scroll-smooth">
+                <div className="text-center space-y-1 pb-2 border-b border-amber-50">
+                  <h3 className="font-serif text-2xl font-extrabold text-amber-955">Student Galleries</h3>
+                  <p className="text-xs text-amber-800/60 leading-normal">
+                    Browse custom tribute walls created by other students in our sanctuary.
+                  </p>
+                </div>
+
+                {isLoadingGallery ? (
+                  <div className="text-center py-12 space-y-2">
+                    <div className="w-6 h-6 border-2 border-amber-600 border-t-transparent rounded-full animate-spin mx-auto" />
+                    <span className="text-xs text-amber-850/60 font-medium">Fetching public walls...</span>
+                  </div>
+                ) : galleryWalls.length === 0 ? (
+                  <div className="text-center py-12 space-y-1">
+                    <p className="text-sm font-semibold text-amber-850/60">No public galleries created yet.</p>
+                    <p className="text-xs text-amber-800/40">Be the first to build a custom wall!</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3.5 max-h-[450px] overflow-y-auto pr-1">
+                    {galleryWalls.map((wall) => {
+                      // Color dot indicator for theme
+                      let themeDot = "bg-amber-400";
+                      if (wall.theme === "emerald") themeDot = "bg-emerald-500";
+                      if (wall.theme === "royal") themeDot = "bg-indigo-500";
+                      if (wall.theme === "mystic") themeDot = "bg-neutral-800";
+
+                      return (
+                        <div
+                          key={wall.id}
+                          onClick={() => {
+                            // Update query parameter dynamically and trigger page state
+                            const url = new URL(window.location.href);
+                            url.searchParams.set("wall", wall.id);
+                            window.history.pushState({}, "", url.toString());
+                            
+                            setIsGalleryOpen(false);
+                            
+                            // Load wall data
+                            setIsLoadingWall(true);
+                            getPublicTributeWallTributes(wall.id).then((tribRes) => {
+                              if (tribRes.success && tribRes.tributes) {
+                                setLoadedWall({
+                                  id: wall.id,
+                                  creatorName: wall.creator_name,
+                                  title: wall.title,
+                                  theme: wall.theme,
+                                  visibility: "public",
+                                  tributes: tribRes.tributes
+                                });
+                              }
+                              setIsLoadingWall(false);
+                            });
+                          }}
+                          className="bg-[#fffdfa] hover:bg-amber-50/40 border border-amber-100 hover:border-amber-250 p-4 rounded-xl cursor-pointer transition-all duration-200 flex items-center justify-between shadow-2xs hover:shadow-xs group"
+                        >
+                          <div className="space-y-1 flex-1 pr-4">
+                            <div className="flex items-center gap-2">
+                              <span className={`w-2 h-2 rounded-full ${themeDot}`} title={`Theme: ${wall.theme}`} />
+                              <h4 className="font-serif font-bold text-amber-955 text-sm group-hover:text-amber-700 transition-colors">
+                                {wall.title}
+                              </h4>
+                            </div>
+                            <p className="text-xs text-amber-800/60 leading-none">
+                              By <strong>{wall.creator_name}</strong>
+                            </p>
+                          </div>
+                          
+                          <div className="flex items-center gap-1.5 text-xs text-amber-600 font-semibold group-hover:text-amber-800">
+                            <span>Open</span>
+                            <ArrowRight size={13} className="transition-transform group-hover:translate-x-0.5" />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </motion.div>
           </div>
