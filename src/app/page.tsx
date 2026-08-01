@@ -7,6 +7,7 @@ import {
   Heart, 
   Search, 
   Plus, 
+  Download,
   X, 
   ChevronDown, 
   Send, 
@@ -38,9 +39,8 @@ import {
   getTributeWallMetadata, 
   unlockTributeWall, 
   getPublicTributeWallTributes, 
-  getPublicTributeWalls,
-  updateTributeWall,
-  deleteTributeWall,
+  updateTributeWall, 
+  deleteTributeWall, 
   verifyWallEditKey
 } from "./actions/wall";
 
@@ -177,10 +177,7 @@ export default function Home() {
   const [isPredefinedTeachersOpen, setIsPredefinedTeachersOpen] = useState(false);
 
   // Gallery states
-  const [isGalleryOpen, setIsGalleryOpen] = useState(false);
-  const [galleryWalls, setGalleryWalls] = useState<any[]>([]);
-  const [isLoadingGallery, setIsLoadingGallery] = useState(false);
-  const [galleryTab, setGalleryTab] = useState<"public" | "mine">("public");
+
 
   // Edit Mode, Deletion & Custom Teacher States
   const [editModeWallId, setEditModeWallId] = useState<string | null>(null);
@@ -912,6 +909,38 @@ export default function Home() {
     }
   };
 
+  // Downloads a local text file containing the wall's live link and edit key
+  const handleDownloadKeyDetails = () => {
+    if (!createdWallLink || !createdWallEditKey) return;
+    const content = `==================================================
+SMRITI TRIBUTE WALL CREDENTIALS
+==================================================
+Tribute Wall Title: ${wallTitle}
+Wall Creator Name: ${wallCreatorName}
+
+Wall Live Link: ${createdWallLink}
+Secret Edit Key: ${createdWallEditKey}
+
+--------------------------------------------------
+IMPORTANT SAFETY NOTE:
+Keep this file safe! You will need the Edit Key
+to make any future edits or deletions to your wall.
+You can also import this wall to other browsers
+using this Edit Key from the Student Galleries panel.
+==================================================`;
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `smriti-wall-key-${createdWallEditKey}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+
+
   // Claim ownership / verify edit key manually
   const handleClaimOwnershipSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1006,24 +1035,7 @@ export default function Home() {
     }
   };
 
-  // Loads public walls list for the gallery modal
-  const loadPublicWalls = async () => {
-    setIsLoadingGallery(true);
-    try {
-      const res = await getPublicTributeWalls();
-      if (res.success && res.walls) {
-        setGalleryWalls(res.walls);
-      } else {
-        setToastMessage("Failed to fetch gallery walls.");
-        setShowToast(true);
-        setTimeout(() => setShowToast(false), 3000);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsLoadingGallery(false);
-    }
-  };
+
 
   // Save teachers helper
   const saveTeachers = (updatedList: Teacher[]) => {
@@ -2393,7 +2405,7 @@ export default function Home() {
                   <div className="space-y-1">
                     <h3 className="font-serif text-lg font-bold text-amber-955">Verify Wall Ownership</h3>
                     <p className="text-xs text-amber-800/60 leading-normal px-2">
-                      Enter the secret **Edit Key** generated when this wall was created to unlock edit and delete controls.
+                      Enter the secret Edit Key generated when this wall was created to unlock edit and delete controls.
                     </p>
                   </div>
 
@@ -2621,10 +2633,9 @@ export default function Home() {
           <div className="flex items-center gap-1.5">
             <button
               onClick={() => {
-                loadPublicWalls();
-                setIsGalleryOpen(true);
+                window.location.href = "/galleries";
               }}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-amber-800 hover:text-amber-950 transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-amber-800 hover:text-amber-955 transition-colors cursor-pointer"
               title="View other student walls"
             >
               <BookOpenCheck size={14} className="text-amber-600" />
@@ -3956,8 +3967,8 @@ export default function Home() {
                     </div>
 
                     {createdWallEditKey && (
-                      <div className="p-3.5 bg-amber-50/50 border border-amber-200 rounded-xl space-y-1.5 text-left">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 block">⚠️ Keep this secret Edit Key</span>
+                      <div className="p-3.5 bg-amber-50/50 border border-amber-250 rounded-xl space-y-2 text-left">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-amber-900 block">⚠️ Keep this secret Edit Key</span>
                         <p className="text-[10px] text-amber-800/70 leading-normal">
                           You will need this key to edit or delete your tribute wall in the future (especially from another browser/device):
                         </p>
@@ -3967,19 +3978,54 @@ export default function Home() {
                             readOnly
                             value={createdWallEditKey}
                             onClick={(e) => e.currentTarget.select()}
-                            className="flex-1 px-2.5 py-1 text-xs border border-amber-300 bg-white rounded-lg text-amber-900 font-mono select-all focus:outline-hidden"
+                            className="flex-1 px-2.5 py-1.5 text-xs border border-amber-300 bg-white rounded-lg text-amber-900 font-mono select-all focus:outline-hidden"
                           />
                           <button
+                            type="button"
                             onClick={() => {
                               navigator.clipboard.writeText(createdWallEditKey);
                               setToastMessage("Edit Key copied!");
                               setShowToast(true);
                               setTimeout(() => setShowToast(false), 2000);
                             }}
-                            className="px-2.5 py-1 bg-amber-700 hover:bg-amber-800 text-white font-bold text-[10px] uppercase tracking-wider rounded-lg transition-colors cursor-pointer"
+                            className="px-3 py-1.5 bg-amber-700 hover:bg-amber-800 text-white font-bold text-[10px] uppercase tracking-wider rounded-lg transition-colors cursor-pointer"
                           >
                             Copy Key
                           </button>
+                        </div>
+                        
+                        {/* New Download & Email backup controls */}
+                        <div className="pt-2.5 border-t border-amber-200/50 space-y-3">
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={handleDownloadKeyDetails}
+                              className="flex items-center justify-center gap-1.5 px-3 py-2 border border-amber-250 bg-white hover:bg-amber-50 text-amber-900 text-xs font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer flex-1"
+                            >
+                              <Download size={12} className="text-amber-700" />
+                              <span>Download Key File</span>
+                            </button>
+                          </div>
+                          
+                          {/* Send credentials email inline input */}
+                          <div className="space-y-1 text-left opacity-70">
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-amber-800/80 block">Or email credentials to yourself:</span>
+                            <div className="flex gap-1.5">
+                              <input
+                                type="email"
+                                disabled
+                                placeholder="Email feature coming soon..."
+                                className="flex-1 px-2.5 py-1.5 text-xs border border-amber-250 bg-amber-50/10 rounded-lg text-amber-800/40 placeholder:text-amber-800/40 cursor-not-allowed focus:outline-hidden"
+                              />
+                              <button
+                                type="button"
+                                disabled
+                                className="px-3 py-1.5 bg-amber-800/40 text-white/50 font-bold text-[10px] uppercase tracking-wider rounded-lg cursor-not-allowed"
+                              >
+                                Send
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -4269,186 +4315,7 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      {/* PUBLIC TRIBUTE WALLS GALLERY */}
-      <AnimatePresence>
-        {isGalleryOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto" role="dialog" aria-modal="true">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsGalleryOpen(false)}
-              className="fixed inset-0 bg-amber-955/30 backdrop-blur-xs cursor-pointer"
-            />
 
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96, y: 15 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 15 }}
-              transition={{ type: "spring", duration: 0.45 }}
-              className="relative w-full max-w-lg bg-white border border-amber-200 rounded-2xl shadow-2xl overflow-hidden z-10 flex flex-col my-8 max-h-[85vh] focus:outline-hidden"
-            >
-              <button
-                onClick={() => setIsGalleryOpen(false)}
-                className="absolute top-4 right-4 text-amber-800/50 hover:text-amber-955 transition-colors cursor-pointer"
-              >
-                <X size={16} />
-              </button>
-
-              <div className="overflow-y-auto p-6 md:p-8 space-y-6 scroll-smooth flex flex-col max-h-[80vh]">
-                <div className="text-center space-y-1 pb-2 border-b border-amber-50">
-                  <h3 className="font-serif text-2xl font-extrabold text-amber-955">Student Galleries</h3>
-                  <p className="text-xs text-amber-800/60 leading-normal">
-                    Browse custom tribute walls or find your own created walls here.
-                  </p>
-                </div>
-
-                {/* Tab Selector */}
-                <div className="grid grid-cols-2 gap-1 p-1 bg-amber-50 rounded-lg text-xs font-bold uppercase tracking-wider text-amber-800 border border-amber-200/50">
-                  <button
-                    type="button"
-                    onClick={() => setGalleryTab("public")}
-                    className={`py-2 rounded-md transition-all text-center cursor-pointer ${
-                      galleryTab === "public"
-                        ? "bg-amber-800 text-white shadow-3xs"
-                        : "hover:bg-amber-500/10 text-amber-800/70"
-                    }`}
-                  >
-                    Public Directories
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setGalleryTab("mine")}
-                    className={`py-2 rounded-md transition-all text-center cursor-pointer ${
-                      galleryTab === "mine"
-                        ? "bg-amber-800 text-white shadow-3xs"
-                        : "hover:bg-amber-500/10 text-amber-800/70"
-                    }`}
-                  >
-                    My Created Walls
-                  </button>
-                </div>
-
-                {/* Tab Content */}
-                {galleryTab === "public" ? (
-                  isLoadingGallery ? (
-                    <div className="text-center py-12 space-y-2">
-                      <div className="w-6 h-6 border-2 border-amber-600 border-t-transparent rounded-full animate-spin mx-auto" />
-                      <span className="text-xs text-amber-800/60 font-medium">Fetching public walls...</span>
-                    </div>
-                  ) : galleryWalls.length === 0 ? (
-                    <div className="text-center py-12 space-y-1">
-                      <p className="text-sm font-semibold text-amber-800/60">No public galleries created yet.</p>
-                      <p className="text-xs text-amber-800/40">Be the first to build a custom wall!</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3.5 max-h-[400px] overflow-y-auto pr-1">
-                      {galleryWalls.map((wall) => {
-                        // Color dot indicator for theme
-                        let themeDot = "bg-amber-400";
-                        if (wall.theme === "emerald") themeDot = "bg-emerald-500";
-                        if (wall.theme === "royal") themeDot = "bg-indigo-500";
-                        if (wall.theme === "mystic") themeDot = "bg-neutral-800";
-
-                        return (
-                          <div
-                            key={wall.id}
-                            onClick={() => {
-                              window.location.href = `/?wall=${wall.id}`;
-                            }}
-                            className="bg-[#fffdfa] hover:bg-amber-50/40 border border-amber-100 hover:border-amber-250 p-4 rounded-xl cursor-pointer transition-all duration-200 flex items-center justify-between shadow-2xs hover:shadow-xs group"
-                          >
-                            <div className="space-y-1 flex-1 pr-4 text-left">
-                              <div className="flex items-center gap-2">
-                                <span className={`w-2 h-2 rounded-full ${themeDot}`} title={`Theme: ${wall.theme}`} />
-                                <h4 className="font-serif font-bold text-amber-955 text-sm group-hover:text-amber-700 transition-colors">
-                                  {wall.title}
-                                </h4>
-                              </div>
-                              <p className="text-xs text-amber-800/60 leading-none">
-                                By <strong>{wall.creator_name}</strong>
-                              </p>
-                            </div>
-                            
-                            <div className="flex items-center gap-1.5 text-xs text-amber-600 font-semibold group-hover:text-amber-800">
-                              <span>Open</span>
-                              <ArrowRight size={13} className="transition-transform group-hover:translate-x-0.5" />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )
-                ) : (
-                  // My Created / Claimed Walls
-                  (() => {
-                    let myCreatedWalls: any[] = [];
-                    if (typeof window !== "undefined") {
-                      try {
-                        const existing = localStorage.getItem("smriti_my_walls");
-                        if (existing) {
-                          myCreatedWalls = JSON.parse(existing);
-                        }
-                      } catch (err) {
-                        console.error(err);
-                      }
-                    }
-
-                    return myCreatedWalls.length === 0 ? (
-                      <div className="text-center py-10 space-y-2.5">
-                        <p className="text-xs text-amber-800/50 italic">You haven't created any custom walls on this browser yet.</p>
-                        <p className="text-[10px] text-amber-800/40 max-w-xs mx-auto leading-normal">
-                          If you previously built a wall on this browser, make sure local storage is not cleared. You can also claim a wall using its secret Edit Key!
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3.5 max-h-[400px] overflow-y-auto pr-1">
-                        {myCreatedWalls.map((wall) => {
-                          // Color dot indicator for theme
-                          let themeDot = "bg-amber-400";
-                          if (wall.theme === "emerald") themeDot = "bg-emerald-500";
-                          if (wall.theme === "royal") themeDot = "bg-indigo-500";
-                          if (wall.theme === "mystic") themeDot = "bg-neutral-800";
-
-                          return (
-                            <div
-                              key={wall.id}
-                              onClick={() => {
-                                window.location.href = `/?wall=${wall.id}`;
-                              }}
-                              className="bg-[#fffdfa] hover:bg-amber-50/40 border border-amber-100 hover:border-amber-250 p-4 rounded-xl cursor-pointer transition-all duration-200 flex items-center justify-between shadow-2xs hover:shadow-xs group"
-                            >
-                              <div className="space-y-1 flex-1 pr-4 text-left">
-                                <div className="flex items-center gap-2">
-                                  <span className={`w-2 h-2 rounded-full ${themeDot}`} title={`Theme: ${wall.theme}`} />
-                                  <h4 className="font-serif font-bold text-amber-955 text-sm group-hover:text-amber-700 transition-colors">
-                                    {wall.title}
-                                  </h4>
-                                </div>
-                                <p className="text-xs text-amber-800/60 leading-none">
-                                  By <strong>{wall.creatorName || "Me"}</strong>
-                                </p>
-                                <div className="flex items-center gap-1.5 pt-1 text-[10px] text-amber-700/60 font-semibold font-mono">
-                                  <span>Edit Key: {wall.editKey || "Claimed"}</span>
-                                </div>
-                              </div>
-                              
-                              <div className="flex items-center gap-1.5 text-xs text-amber-600 font-semibold group-hover:text-amber-800">
-                                <span>Open</span>
-                                <ArrowRight size={13} className="transition-transform group-hover:translate-x-0.5" />
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })()
-                )}
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
 
       {/* TOAST ALERTS SYSTEM */}

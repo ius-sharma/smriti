@@ -271,3 +271,76 @@ export async function sendFestivalReminderEmail({
     return { success: false, error: err?.message || "Internal Server Error" };
   }
 }
+
+interface WallCredentialsParams {
+  email: string;
+  creatorName: string;
+  wallTitle: string;
+  wallLink: string;
+  editKey: string;
+}
+
+/**
+ * Sends wall link and edit key credentials to the creator's email.
+ */
+export async function sendWallCredentialsEmail({
+  email,
+  creatorName,
+  wallTitle,
+  wallLink,
+  editKey
+}: WallCredentialsParams) {
+  try {
+    const resend = getResendClient();
+    if (!resend) {
+      return { success: false, error: "API_KEY_MISSING" };
+    }
+
+    const htmlContent = `
+      <div style="font-family: 'Playfair Display', Georgia, serif; background-color: #fffdf5; padding: 40px 20px; color: #1c150c;">
+        <div style="max-w: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #fde047; border-radius: 16px; padding: 32px; box-shadow: 0 4px 20px rgba(180,83,9,0.05);">
+          <h2 style="font-size: 22px; font-weight: bold; color: #78350f; border-bottom: 1px solid #fefce8; padding-bottom: 16px; margin-top: 0; text-align: center;">
+            Your Smriti Tribute Wall Keys 🔑
+          </h2>
+          <p style="font-size: 15px; line-height: 1.6; color: #451a03;">
+            Pranam <strong>${creatorName}</strong>,
+          </p>
+          <p style="font-size: 15px; line-height: 1.6; color: #451a03;">
+            Here are the access links and secret edit credentials for your newly created tribute wall: <strong>"${wallTitle}"</strong>.
+          </p>
+          <div style="background-color: #fffdf2; border-left: 3px solid #f59e0b; padding: 16px; margin: 20px 0; border-radius: 0 8px 8px 0; font-family: monospace;">
+            <p style="margin: 0 0 10px 0; font-size: 13px; color: #92400e;">
+              <strong>Wall Link:</strong> <a href="${wallLink}" style="color: #b45309; text-decoration: underline;">${wallLink}</a>
+            </p>
+            <p style="margin: 0; font-size: 13px; color: #92400e;">
+              <strong>Secret Edit Key:</strong> <span style="font-size: 15px; font-weight: bold; color: #78350f;">${editKey}</span>
+            </p>
+          </div>
+          <p style="font-size: 13px; line-height: 1.6; color: #78350f; background-color: #fffbeb; padding: 12px; border-radius: 8px;">
+            <strong>⚠️ IMPORTANT SAFETY NOTE:</strong> Keep this email safe! You will need this secret Edit Key to unlock edit and delete controls in the future (especially if you access from a different browser or device).
+          </p>
+          <div style="margin-top: 32px; border-top: 1px solid #fffdf5; padding-top: 16px; font-size: 11px; text-align: center; color: #b45309; text-transform: uppercase; letter-spacing: 0.05em;">
+            Smriti &copy; 2026 | Dedicated to Honoring Mentorship
+          </div>
+        </div>
+      </div>
+    `;
+
+    const { data, error } = await resend.emails.send({
+      from: "Smriti Tribute Wall <onboarding@resend.dev>",
+      to: email,
+      subject: `Credentials for your Tribute Wall "${wallTitle}"`,
+      html: htmlContent
+    });
+
+    if (error) {
+      console.error("Resend API returned error for credentials email:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data };
+  } catch (err: any) {
+    console.error("Server Action sendWallCredentialsEmail caught error:", err);
+    return { success: false, error: err?.message || "Internal Server Error" };
+  }
+}

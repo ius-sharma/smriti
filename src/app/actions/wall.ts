@@ -290,3 +290,157 @@ export async function getPublicTributeWalls() {
     return { success: false, error: err?.message || "Internal Server Error" };
   }
 }
+
+/**
+ * Finds a wall's details by its edit key and imports it.
+ */
+export async function getWallByEditKey(editKey: string) {
+  try {
+    const { data, error } = await supabase
+      .from("tribute_walls")
+      .select("id, title, theme, creator_name, visibility")
+      .eq("edit_key", editKey)
+      .single();
+
+    if (error || !data) {
+      return { success: false, error: "Wall not found with this edit key" };
+    }
+
+    return {
+      success: true,
+      wall: {
+        id: data.id,
+        title: data.title,
+        theme: data.theme,
+        creatorName: data.creator_name,
+        visibility: data.visibility
+      }
+    };
+  } catch (err: any) {
+    return { success: false, error: "Search failed" };
+  }
+}
+
+const ADMIN_EMAIL = "sharmaeditzayush@gmail.com";
+const ADMIN_PASS = "Ayush@20061029";
+
+function verifyAdminCredentials(email: string, pass: string): boolean {
+  return email === ADMIN_EMAIL && pass === ADMIN_PASS;
+}
+
+/**
+ * Fetches all tribute walls for the admin dashboard.
+ */
+export async function adminGetAllWalls(email: string, pass: string) {
+  try {
+    if (!verifyAdminCredentials(email, pass)) {
+      return { success: false, error: "Unauthorized access" };
+    }
+
+    const { data, error } = await supabase
+      .from("tribute_walls")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, walls: data };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Internal Server Error" };
+  }
+}
+
+/**
+ * Deletes any tribute wall by ID (Admin bypass).
+ */
+export async function adminDeleteWall(email: string, pass: string, wallId: string) {
+  try {
+    if (!verifyAdminCredentials(email, pass)) {
+      return { success: false, error: "Unauthorized access" };
+    }
+
+    const { error } = await supabase
+      .from("tribute_walls")
+      .delete()
+      .eq("id", wallId);
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Internal Server Error" };
+  }
+}
+
+/**
+ * Updates any tribute wall by ID (Admin bypass).
+ */
+export async function adminUpdateWall(email: string, pass: string, wallId: string, updates: { title: string; creator_name: string; visibility: string; theme: string }) {
+  try {
+    if (!verifyAdminCredentials(email, pass)) {
+      return { success: false, error: "Unauthorized access" };
+    }
+
+    const { error } = await supabase
+      .from("tribute_walls")
+      .update(updates)
+      .eq("id", wallId);
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Internal Server Error" };
+  }
+}
+
+/**
+ * Seeds or restores the default Admin Favorite Tribute Wall.
+ */
+export async function seedAdminWall(email: string, pass: string) {
+  try {
+    if (!verifyAdminCredentials(email, pass)) {
+      return { success: false, error: "Unauthorized access" };
+    }
+
+    // Check if the wall already exists to avoid duplicates
+    const { data: existing } = await supabase
+      .from("tribute_walls")
+      .select("id")
+      .eq("edit_key", "ADMIN-WALL")
+      .maybeSingle();
+
+    if (existing) {
+      return { success: true, message: "Admin Wall already exists!", wallId: existing.id };
+    }
+
+    // Insert the admin wall loaded with INITIAL_TEACHERS
+    const { data, error } = await supabase
+      .from("tribute_walls")
+      .insert({
+        creator_name: "Admin",
+        title: "Admin's Favorite Tribute Wall",
+        theme: "amber",
+        visibility: "public",
+        tributes: INITIAL_TEACHERS,
+        edit_key: "ADMIN-WALL"
+      })
+      .select("id")
+      .single();
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, message: "Admin Wall created successfully!", wallId: data.id };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Internal Server Error" };
+  }
+}
+
