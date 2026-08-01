@@ -27,7 +27,8 @@ import {
   ArrowRight,
   Share2,
   Lock,
-  Bell
+  Bell,
+  Trash2
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import { INITIAL_TEACHERS, Teacher } from "./data";
@@ -37,7 +38,10 @@ import {
   getTributeWallMetadata, 
   unlockTributeWall, 
   getPublicTributeWallTributes, 
-  getPublicTributeWalls 
+  getPublicTributeWalls,
+  updateTributeWall,
+  deleteTributeWall,
+  verifyWallEditKey
 } from "./actions/wall";
 
 
@@ -175,6 +179,31 @@ export default function Home() {
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
   const [galleryWalls, setGalleryWalls] = useState<any[]>([]);
   const [isLoadingGallery, setIsLoadingGallery] = useState(false);
+
+  // Edit Mode, Deletion & Custom Teacher States
+  const [editModeWallId, setEditModeWallId] = useState<string | null>(null);
+  const [editModeEditKey, setEditModeEditKey] = useState<string | null>(null);
+  const [createdWallEditKey, setCreatedWallEditKey] = useState("");
+  
+  // Custom teacher sub-form inside Wall Builder
+  const [isCustomTeacherFormOpen, setIsCustomTeacherFormOpen] = useState(false);
+  const [newTeacherName, setNewTeacherName] = useState("");
+  const [newTeacherSubject, setNewTeacherSubject] = useState("");
+  const [newTeacherCollege, setNewTeacherCollege] = useState("");
+  const [newTeacherDesignation, setNewTeacherDesignation] = useState("");
+  const [newTeacherAdvice, setNewTeacherAdvice] = useState("");
+  const [newTeacherMemory, setNewTeacherMemory] = useState("");
+  const [newTeacherYears, setNewTeacherYears] = useState("1 Year");
+  const [customWallTeachers, setCustomWallTeachers] = useState<Partial<Teacher>[]>([]);
+
+  // Ownership settings
+  const [isOwnershipVerified, setIsOwnershipVerified] = useState(false);
+  const [isManageMenuOpen, setIsManageMenuOpen] = useState(false);
+  const [isClaimOwnershipOpen, setIsClaimOwnershipOpen] = useState(false);
+  const [claimEditKeyInput, setClaimEditKeyInput] = useState("");
+  const [claimEditKeyError, setClaimEditKeyError] = useState(false);
+  const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
+  const [isDeletingWall, setIsDeletingWall] = useState(false);
   
   // Modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -582,7 +611,87 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Submit handler for creating a new custom tribute wall
+  // Check ownership of the loaded wall
+  useEffect(() => {
+    const wallId = loadedWall?.id || wallMetadata?.id;
+    if (!wallId) {
+      setIsOwnershipVerified(false);
+      setEditModeEditKey(null);
+      return;
+    }
+
+    try {
+      const existing = localStorage.getItem("smriti_my_walls");
+      if (existing) {
+        const list = JSON.parse(existing);
+        const match = list.find((item: any) => item.id === wallId);
+        if (match && match.editKey) {
+          setIsOwnershipVerified(true);
+          setEditModeEditKey(match.editKey);
+          return;
+        }
+      }
+    } catch (e) {
+      console.error("Error reading ownership:", e);
+    }
+    
+    setIsOwnershipVerified(false);
+    setEditModeEditKey(null);
+  }, [loadedWall, wallMetadata]);
+
+  // Adds a brand new custom teacher to the wall builder checklist
+  const handleAddCustomTeacherToWall = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTeacherName || !newTeacherSubject || !newTeacherCollege || !newTeacherAdvice || !newTeacherMemory) {
+      setToastMessage("Please fill in all required fields.");
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 3000);
+      return;
+    }
+
+    const customId = `custom-wall-${Date.now()}`;
+    const newTeacher: Partial<Teacher> = {
+      id: customId,
+      name: newTeacherName,
+      salutation: newTeacherName,
+      subject: newTeacherSubject,
+      designation: newTeacherDesignation || "Teacher",
+      college: newTeacherCollege,
+      years: newTeacherYears || "1 Year",
+      photo: "",
+      bestAdvice: newTeacherAdvice,
+      favoriteMemory: newTeacherMemory,
+      teachingStyle: "Custom",
+      personality: "Custom",
+      lifeLesson: "Custom",
+      howTheyShaped: "Custom Tribute",
+      skillsLearned: "",
+      favoriteSaying: "",
+      contactEmail: "",
+      initials: newTeacherName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2),
+      avatarColor: "from-amber-250 to-amber-350 text-amber-955 border-amber-500",
+      bgPattern: "bg-[radial-gradient(#b45309_0.8px,transparent_0.8px)] [background-size:14px_14px]"
+    };
+
+    setCustomWallTeachers([...customWallTeachers, newTeacher]);
+    setSelectedTeacherIds([...selectedTeacherIds, customId]);
+
+    // Reset sub-form
+    setNewTeacherName("");
+    setNewTeacherSubject("");
+    setNewTeacherCollege("");
+    setNewTeacherDesignation("");
+    setNewTeacherAdvice("");
+    setNewTeacherMemory("");
+    setNewTeacherYears("1 Year");
+    setIsCustomTeacherFormOpen(false);
+
+    setToastMessage("Custom teacher added to wall list!");
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 2000);
+  };
+
+  // Submit handler for creating or updating a custom tribute wall
   const handleCreateWallSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!wallCreatorName || !wallTitle || selectedTeacherIds.length === 0) {
@@ -594,66 +703,227 @@ export default function Home() {
 
     setIsGeneratingWall(true);
     try {
-      // Filter out the selected teachers from our list
-      const tributesToSave = teachers
-        .filter(t => selectedTeacherIds.includes(t.id))
+      const combinedSource = [...teachers, ...customWallTeachers];
+      const tributesToSave = combinedSource
+        .filter((t): t is typeof t & { id: string } => !!t.id && selectedTeacherIds.includes(t.id))
         .map(t => ({
-          name: t.name,
-          salutation: t.salutation,
-          subject: t.subject,
-          designation: t.designation,
-          college: t.college,
-          years: t.years,
+          id: t.id,
+          name: t.name || "",
+          salutation: t.salutation || t.name || "",
+          subject: t.subject || "",
+          designation: t.designation || "Teacher",
+          college: t.college || "",
+          years: t.years || "1 Year",
           photo: t.photo || "",
-          bestAdvice: t.bestAdvice,
-          favoriteMemory: t.favoriteMemory,
-          teachingStyle: t.teachingStyle,
-          personality: t.personality,
-          lifeLesson: t.lifeLesson,
-          howTheyShaped: t.howTheyShaped,
-          skillsLearned: t.skillsLearned,
-          favoriteSaying: t.favoriteSaying,
-          contactEmail: t.contactEmail,
-          initials: t.initials,
-          avatarColor: t.avatarColor,
-          bgPattern: t.bgPattern
+          bestAdvice: t.bestAdvice || "",
+          favoriteMemory: t.favoriteMemory || "",
+          teachingStyle: t.teachingStyle || "Custom",
+          personality: t.personality || "Custom",
+          lifeLesson: t.lifeLesson || "Custom",
+          howTheyShaped: t.howTheyShaped || "Custom Tribute",
+          skillsLearned: t.skillsLearned || "",
+          favoriteSaying: t.favoriteSaying || "",
+          contactEmail: t.contactEmail || "",
+          initials: t.initials || "T",
+          avatarColor: t.avatarColor || "from-amber-200 to-amber-300",
+          bgPattern: t.bgPattern || ""
         }));
 
-      const res = await createTributeWall({
-        creatorName: wallCreatorName,
-        title: wallTitle,
-        theme: wallTheme,
-        visibility: wallVisibility,
-        password: wallVisibility === "password" ? wallPassword : undefined,
-        tributes: tributesToSave
-      });
+      if (editModeWallId && editModeEditKey) {
+        // UPDATE MODE
+        const res = await updateTributeWall({
+          id: editModeWallId,
+          editKey: editModeEditKey,
+          creatorName: wallCreatorName,
+          title: wallTitle,
+          theme: wallTheme,
+          visibility: wallVisibility,
+          password: wallVisibility === "password" ? wallPassword : undefined,
+          tributes: tributesToSave
+        });
 
-      if (res.success && res.id) {
-        const link = `${window.location.origin}?wall=${res.id}`;
-        setCreatedWallLink(link);
-        
-        // Add to creator's local storage list of owned walls
-        const existing = localStorage.getItem("smriti_my_walls");
-        const list = existing ? JSON.parse(existing) : [];
-        list.push({ id: res.id, title: wallTitle, creatorName: wallCreatorName, theme: wallTheme });
-        localStorage.setItem("smriti_my_walls", JSON.stringify(list));
+        if (res.success) {
+          setLoadedWall({
+            id: editModeWallId,
+            creatorName: wallCreatorName,
+            title: wallTitle,
+            theme: wallTheme,
+            visibility: wallVisibility,
+            tributes: tributesToSave as Teacher[]
+          });
 
-        setToastMessage("Tribute Wall created successfully!");
-        setShowToast(true);
-        setTimeout(() => setShowToast(false), 3000);
+          // Update details in local storage owned walls
+          const existing = localStorage.getItem("smriti_my_walls");
+          if (existing) {
+            const list = JSON.parse(existing);
+            const index = list.findIndex((item: any) => item.id === editModeWallId);
+            if (index !== -1) {
+              list[index] = { 
+                ...list[index], 
+                title: wallTitle, 
+                creatorName: wallCreatorName, 
+                theme: wallTheme 
+              };
+              localStorage.setItem("smriti_my_walls", JSON.stringify(list));
+            }
+          }
+
+          setToastMessage("Tribute Wall updated successfully!");
+          setShowToast(true);
+          setTimeout(() => setShowToast(false), 3000);
+          setIsWallBuilderOpen(false);
+          setEditModeWallId(null);
+        } else {
+          setToastMessage("Error updating wall: " + (res.error || "unknown error"));
+          setShowToast(true);
+          setTimeout(() => setShowToast(false), 3000);
+        }
       } else {
-        setToastMessage("Error creating wall: " + (res.error || "unknown error"));
-        setShowToast(true);
-        setTimeout(() => setShowToast(false), 3000);
+        // CREATE MODE
+        const res = await createTributeWall({
+          creatorName: wallCreatorName,
+          title: wallTitle,
+          theme: wallTheme,
+          visibility: wallVisibility,
+          password: wallVisibility === "password" ? wallPassword : undefined,
+          tributes: tributesToSave
+        });
+
+        if (res.success && res.id && res.editKey) {
+          const link = `${window.location.origin}?wall=${res.id}`;
+          setCreatedWallLink(link);
+          setCreatedWallEditKey(res.editKey);
+          
+          const existing = localStorage.getItem("smriti_my_walls");
+          const list = existing ? JSON.parse(existing) : [];
+          list.push({ 
+            id: res.id, 
+            editKey: res.editKey, 
+            title: wallTitle, 
+            creatorName: wallCreatorName, 
+            theme: wallTheme 
+          });
+          localStorage.setItem("smriti_my_walls", JSON.stringify(list));
+
+          setToastMessage("Tribute Wall created successfully!");
+          setShowToast(true);
+          setTimeout(() => setShowToast(false), 3000);
+        } else {
+          setToastMessage("Error creating wall: " + (res.error || "unknown error"));
+          setShowToast(true);
+          setTimeout(() => setShowToast(false), 3000);
+        }
       }
     } catch (err) {
       console.error(err);
-      setToastMessage("An error occurred while creating the wall.");
+      setToastMessage("An error occurred while saving the wall.");
       setShowToast(true);
       setTimeout(() => setShowToast(false), 3000);
     } finally {
       setIsGeneratingWall(false);
     }
+  };
+
+  // Deletes the loaded wall
+  const handleDeleteWallSubmit = async () => {
+    const wallId = loadedWall?.id || wallMetadata?.id;
+    if (!wallId || !editModeEditKey) return;
+
+    setIsDeletingWall(true);
+    try {
+      const res = await deleteTributeWall(wallId, editModeEditKey);
+      if (res.success) {
+        const existing = localStorage.getItem("smriti_my_walls");
+        if (existing) {
+          const list = JSON.parse(existing);
+          const filtered = list.filter((item: any) => item.id !== wallId);
+          localStorage.setItem("smriti_my_walls", JSON.stringify(filtered));
+        }
+
+        setToastMessage("Tribute Wall deleted successfully.");
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 3000);
+
+        const url = new URL(window.location.href);
+        url.searchParams.delete("wall");
+        window.history.replaceState({}, "", url.toString());
+        setLoadedWall(null);
+        setWallMetadata(null);
+        setIsConfirmDeleteOpen(false);
+      } else {
+        setToastMessage("Failed to delete: " + (res.error || "unauthorized"));
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 3000);
+      }
+    } catch (err) {
+      console.error(err);
+      setToastMessage("An error occurred during deletion.");
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 3000);
+    } finally {
+      setIsDeletingWall(false);
+    }
+  };
+
+  // Claim ownership / verify edit key manually
+  const handleClaimOwnershipSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const wallId = loadedWall?.id || wallMetadata?.id;
+    if (!wallId || !claimEditKeyInput) return;
+
+    try {
+      const res = await verifyWallEditKey(wallId, claimEditKeyInput);
+      if (res.success) {
+        const existing = localStorage.getItem("smriti_my_walls");
+        const list = existing ? JSON.parse(existing) : [];
+        if (!list.some((item: any) => item.id === wallId)) {
+          list.push({ 
+            id: wallId, 
+            editKey: claimEditKeyInput, 
+            title: loadedWall?.title || wallMetadata?.title || "My Wall",
+            creatorName: loadedWall?.creatorName || wallMetadata?.creatorName || "Student",
+            theme: loadedWall?.theme || wallMetadata?.theme || "amber"
+          });
+          localStorage.setItem("smriti_my_walls", JSON.stringify(list));
+        }
+        
+        setIsOwnershipVerified(true);
+        setEditModeEditKey(claimEditKeyInput);
+        setClaimEditKeyInput("");
+        setIsClaimOwnershipOpen(false);
+        setClaimEditKeyError(false);
+
+        setToastMessage("Ownership verified! Controls unlocked.");
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 3000);
+      } else {
+        setClaimEditKeyError(true);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Opens wall editor and populates builder form
+  const handleEditWallClick = () => {
+    const wall = loadedWall;
+    if (!wall || !editModeEditKey) return;
+
+    setEditModeWallId(wall.id);
+    setWallCreatorName(wall.creatorName);
+    setWallTitle(wall.title);
+    setWallTheme(wall.theme);
+    setWallVisibility(wall.visibility);
+    setWallPassword("");
+    
+    const customTributes = wall.tributes.filter(t => t.id && t.id.startsWith("custom-wall-"));
+    
+    setSelectedTeacherIds(wall.tributes.map(t => t.id));
+    setCustomWallTeachers(customTributes);
+    setCreatedWallLink("");
+    setCreatedWallEditKey("");
+    setIsWallBuilderOpen(true);
+    setIsManageMenuOpen(false);
   };
 
   // Submit handler for unlocking a password-protected tribute wall
@@ -1489,14 +1759,14 @@ export default function Home() {
       bgClass = "bg-[#f4fbf7]";
       textColorClass = "text-emerald-950";
       subTextColorClass = "text-emerald-800/75";
-      accentClass = "bg-emerald-850 hover:bg-emerald-900 text-white";
+      accentClass = "bg-emerald-800 hover:bg-emerald-900 text-white";
       borderClass = "border-emerald-250";
       cardClass = "bg-white border-emerald-100 hover:border-emerald-250 text-emerald-950";
     } else if (loadedWall.theme === "royal") {
       bgClass = "bg-[#faf9ff]";
-      textColorClass = "text-indigo-950";
+      textColorClass = "text-indigo-955";
       subTextColorClass = "text-indigo-800/75";
-      accentClass = "bg-indigo-850 hover:bg-indigo-900 text-white";
+      accentClass = "bg-indigo-800 hover:bg-indigo-900 text-white";
       borderClass = "border-indigo-250";
       cardClass = "bg-white border-indigo-100 hover:border-indigo-250 text-indigo-955";
     } else if (loadedWall.theme === "mystic") {
@@ -1522,6 +1792,36 @@ export default function Home() {
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200 uppercase font-bold tracking-wider">Student Wall</span>
           </div>
           <div className="flex items-center gap-2">
+            {!isOwnershipVerified ? (
+              <button
+                onClick={() => {
+                  setClaimEditKeyInput("");
+                  setClaimEditKeyError(false);
+                  setIsClaimOwnershipOpen(true);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all text-amber-800 border-amber-250 bg-amber-50/20 hover:bg-amber-50 cursor-pointer"
+                title="Claim ownership of this wall to edit or delete it"
+              >
+                <User size={13} className="text-amber-600" />
+                Claim Wall
+              </button>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={handleEditWallClick}
+                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all bg-emerald-800 hover:bg-emerald-900 text-white border-emerald-700 cursor-pointer"
+                >
+                  Edit Wall
+                </button>
+                <button
+                  onClick={() => setIsConfirmDeleteOpen(true)}
+                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all bg-red-800 hover:bg-red-900 text-white border-red-700 cursor-pointer"
+                >
+                  Delete
+                </button>
+              </div>
+            )}
+
             <button
               onClick={() => {
                 // Return to main wall
@@ -1603,7 +1903,7 @@ export default function Home() {
                   </div>
 
                   <blockquote className="border-l border-amber-300 pl-3.5 py-0.5 mb-6">
-                    <p className={`font-serif text-xs italic leading-relaxed ${loadedWall.theme === "mystic" ? "text-neutral-300" : "text-amber-850"}`}>
+                    <p className={`font-serif text-xs italic leading-relaxed ${loadedWall.theme === "mystic" ? "text-neutral-300" : "text-amber-800"}`}>
                       &ldquo;{teacher.bestAdvice}&rdquo;
                     </p>
                   </blockquote>
@@ -1623,6 +1923,506 @@ export default function Home() {
             ))}
           </div>
         </main>
+
+        {/* DETAILED PROFILE VIEW MODAL FOR CUSTOM WALL */}
+        <AnimatePresence>
+          {activeTeacher && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto" role="dialog" aria-modal="true">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setActiveTeacher(null)}
+                className="fixed inset-0 bg-amber-955/35 backdrop-blur-xs cursor-pointer"
+              />
+
+              <motion.div
+                ref={modalRef}
+                initial={{ opacity: 0, scale: 0.96, y: 15 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96, y: 15 }}
+                transition={{ type: "spring", duration: 0.45 }}
+                className="relative w-full max-w-2xl bg-white border border-amber-200 rounded-2xl shadow-2xl overflow-hidden z-10 flex flex-col my-8 max-h-[85vh] focus:outline-hidden"
+                tabIndex={-1}
+              >
+                <button
+                  ref={closeButtonRef}
+                  onClick={() => setActiveTeacher(null)}
+                  aria-label="Close modal"
+                  className="absolute top-4 right-4 z-20 p-2 rounded-full text-amber-800/50 hover:text-amber-955 hover:bg-amber-50 border border-transparent hover:border-amber-200 transition-all focus:outline-hidden focus:ring-1 focus:ring-amber-500 cursor-pointer"
+                >
+                  <X size={16} />
+                </button>
+
+                <div className="overflow-y-auto p-6 md:p-10 pt-16 space-y-8 scroll-smooth">
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.05 }}
+                    className="flex flex-col items-center text-center border-b border-amber-100 pb-8"
+                  >
+                    <div className="relative w-28 h-28 rounded-full overflow-hidden border-2 border-amber-300 p-1 bg-white mb-4 shadow-sm">
+                      {activeTeacher.photo ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={activeTeacher.photo}
+                          alt={activeTeacher.name}
+                          className="w-full h-full object-cover rounded-full"
+                          onError={(e) => { e.currentTarget.style.display = "none"; }}
+                        />
+                      ) : null}
+                      <div className={`absolute inset-0 opacity-10 ${activeTeacher.bgPattern}`} />
+                      <span className="absolute inset-0 flex items-center justify-center font-serif text-3xl font-bold text-amber-900 bg-linear-to-br from-amber-50 to-amber-150 rounded-full">{activeTeacher.initials}</span>
+                    </div>
+
+                    <h2 className="font-serif text-2xl md:text-3xl font-bold text-amber-955 mb-1">{activeTeacher.name}</h2>
+                    <span className="px-3 py-1 text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-250/50 rounded-full uppercase tracking-wider">{activeTeacher.subject}</span>
+                    
+                    <div className="mt-4 text-xs text-amber-900/60 space-y-0.5">
+                      <p className="font-semibold">{activeTeacher.designation}</p>
+                      <p>{activeTeacher.college}</p>
+                    </div>
+                  </motion.div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="space-y-6">
+                      <div className="bg-[#fffdfa] border border-amber-100 p-5 rounded-xl diary-page-curl">
+                        <h4 className="text-[10px] font-bold uppercase tracking-wider text-amber-500 mb-2 flex items-center gap-1.5"><Clock size={12} /> Connection Years</h4>
+                        <p className="text-xs text-amber-900 leading-relaxed">{activeTeacher.years}</p>
+                      </div>
+
+                      <div className="bg-[#fffdfa] border border-amber-100 p-5 rounded-xl diary-page-curl">
+                        <h4 className="text-[10px] font-bold uppercase tracking-wider text-amber-500 mb-2 flex items-center gap-1.5"><Award size={12} /> Best Advice Given</h4>
+                        <p className="text-xs text-amber-900 leading-relaxed font-serif italic font-medium">&ldquo;{activeTeacher.bestAdvice}&rdquo;</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-6">
+                      <div className="bg-[#fffdfa] border border-amber-100 p-5 rounded-xl diary-page-curl h-full">
+                        <h4 className="text-[10px] font-bold uppercase tracking-wider text-amber-500 mb-2 flex items-center gap-1.5"><MessageSquare size={12} /> Gratitude Memory</h4>
+                        <p className="text-xs text-amber-900/80 leading-relaxed whitespace-pre-wrap font-serif italic">&ldquo;{activeTeacher.favoriteMemory}&rdquo;</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* TRIBUTE WALL BUILDER MODAL (EDIT MODE) */}
+        <AnimatePresence>
+          {isWallBuilderOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto" role="dialog" aria-modal="true">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsWallBuilderOpen(false)}
+                className="fixed inset-0 bg-amber-955/30 backdrop-blur-xs cursor-pointer"
+              />
+
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96, y: 15 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96, y: 15 }}
+                transition={{ type: "spring", duration: 0.45 }}
+                className="relative w-full max-w-lg bg-white border border-amber-200 rounded-2xl shadow-2xl overflow-hidden z-10 flex flex-col my-8 max-h-[85vh] focus:outline-hidden"
+              >
+                <button
+                  onClick={() => setIsWallBuilderOpen(false)}
+                  className="absolute top-4 right-4 text-amber-800/50 hover:text-amber-955 transition-colors cursor-pointer"
+                >
+                  <X size={16} />
+                </button>
+
+                <div className="overflow-y-auto p-6 md:p-8 space-y-6 scroll-smooth flex-1 min-h-0">
+                  <div className="text-center space-y-1 pb-2 border-b border-amber-50">
+                    <h3 className="font-serif text-2xl font-extrabold text-amber-955">Edit Tribute Wall</h3>
+                    <p className="text-xs text-amber-800/60 leading-normal">
+                      Update your custom wall space details and teachers.
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleCreateWallSubmit} className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase text-amber-800 mb-1">Your Name *</label>
+                        <input
+                          type="text"
+                          required
+                          value={wallCreatorName}
+                          onChange={(e) => setWallCreatorName(e.target.value)}
+                          placeholder="e.g. Ayush Sharma"
+                          className="w-full px-3 py-2 text-xs border border-amber-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 focus:border-amber-400 rounded-lg text-amber-955 bg-[#fffdfa]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase text-amber-800 mb-1">Wall Title *</label>
+                        <input
+                          type="text"
+                          required
+                          value={wallTitle}
+                          onChange={(e) => setWallTitle(e.target.value)}
+                          placeholder="e.g. My Mentors"
+                          className="w-full px-3 py-2 text-xs border border-amber-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 focus:border-amber-400 rounded-lg text-amber-955 bg-[#fffdfa]"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase text-amber-800 mb-1">Select Theme *</label>
+                        <select
+                          value={wallTheme}
+                          onChange={(e) => setWallTheme(e.target.value)}
+                          className="w-full px-3 py-2 text-xs border border-amber-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 focus:border-amber-400 rounded-lg text-amber-955 bg-white cursor-pointer"
+                        >
+                          <option value="amber">Amber Parchment (Classic)</option>
+                          <option value="emerald">Emerald Forest (Calm)</option>
+                          <option value="royal">Royal Velvet (Premium)</option>
+                          <option value="mystic">Mystic Charcoal (Dark)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase text-amber-800 mb-1">Visibility / Access *</label>
+                        <select
+                          value={wallVisibility}
+                          onChange={(e) => setWallVisibility(e.target.value)}
+                          className="w-full px-3 py-2 text-xs border border-amber-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 focus:border-amber-400 rounded-lg text-amber-955 bg-white cursor-pointer"
+                        >
+                          <option value="public">Public (Visible in gallery)</option>
+                          <option value="private">Private (Unlisted, link sharing only)</option>
+                          <option value="password">Password Protected (Protected by passcode)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {wallVisibility === "password" && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        className="space-y-1"
+                      >
+                        <label className="block text-[10px] font-bold uppercase text-amber-800 mb-1">Set Passcode *</label>
+                        <input
+                          type="password"
+                          required
+                          value={wallPassword}
+                          onChange={(e) => setWallPassword(e.target.value)}
+                          placeholder="Create passcode (e.g. 123456)"
+                          className="w-full px-3 py-2 text-xs border border-amber-250 focus:outline-hidden focus:ring-2 focus:ring-amber-400 focus:border-amber-400 rounded-lg text-amber-955 bg-[#fffdfa] font-mono"
+                        />
+                      </motion.div>
+                    )}
+
+                    <div className="space-y-2">
+                      <label className="block text-[10px] font-bold uppercase text-amber-800">
+                        Choose Teachers to Include * <span className="text-[9px] text-amber-600/80 font-normal lowercase">(Select at least one)</span>
+                      </label>
+                      
+                      <div className="border border-amber-100 rounded-xl max-h-[180px] overflow-y-auto p-3 bg-amber-50/10 space-y-2">
+                        {[...teachers, ...customWallTeachers].map(teacher => {
+                          const isSelected = selectedTeacherIds.includes(teacher.id || "");
+                          return (
+                            <label
+                              key={teacher.id}
+                              className={`flex items-center gap-2.5 p-2 rounded-lg border text-xs cursor-pointer transition-all ${
+                                isSelected 
+                                  ? "border-amber-400 bg-amber-50/50 text-amber-900 font-bold" 
+                                  : "border-transparent bg-white/40 text-amber-900/70 hover:bg-white"
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => {
+                                  if (isSelected) {
+                                    setSelectedTeacherIds(selectedTeacherIds.filter(id => id !== teacher.id));
+                                  } else {
+                                    setSelectedTeacherIds([...selectedTeacherIds, teacher.id || ""]);
+                                  }
+                                }}
+                                className="accent-amber-700 cursor-pointer"
+                              />
+                              <div className="flex-1 flex justify-between items-center">
+                                <span>{teacher.name}</span>
+                                <span className="text-[10px] opacity-75 font-normal px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200/50">{teacher.subject}</span>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Custom Teacher Creator Inline Form */}
+                    <div className="space-y-2 pt-1">
+                      {isCustomTeacherFormOpen ? (
+                        <div className="border border-amber-200 p-4 rounded-xl space-y-4 bg-amber-50/10 text-left">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 block pb-1 border-b border-amber-200/50">Add Custom Teacher Details</span>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[9px] font-bold uppercase text-amber-800 mb-0.5">Teacher Name *</label>
+                              <input
+                                type="text"
+                                value={newTeacherName}
+                                onChange={(e) => setNewTeacherName(e.target.value)}
+                                placeholder="e.g. Paras Sir"
+                                className="w-full px-2.5 py-1.5 text-xs border border-amber-200 rounded-lg bg-white text-amber-955 focus:outline-hidden"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-bold uppercase text-amber-800 mb-0.5">Subject *</label>
+                              <input
+                                type="text"
+                                value={newTeacherSubject}
+                                onChange={(e) => setNewTeacherSubject(e.target.value)}
+                                placeholder="e.g. DSA"
+                                className="w-full px-2.5 py-1.5 text-xs border border-amber-200 rounded-lg bg-white text-amber-955 focus:outline-hidden"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[9px] font-bold uppercase text-amber-800 mb-0.5">School/College/University *</label>
+                              <input
+                                type="text"
+                                value={newTeacherCollege}
+                                onChange={(e) => setNewTeacherCollege(e.target.value)}
+                                placeholder="e.g. Marwadi University"
+                                className="w-full px-2.5 py-1.5 text-xs border border-amber-200 rounded-lg bg-white text-amber-955 focus:outline-hidden"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-bold uppercase text-amber-800 mb-0.5">Designation</label>
+                              <input
+                                type="text"
+                                value={newTeacherDesignation}
+                                onChange={(e) => setNewTeacherDesignation(e.target.value)}
+                                placeholder="e.g. HOD / Assistant Prof"
+                                className="w-full px-2.5 py-1.5 text-xs border border-amber-200 rounded-lg bg-white text-amber-955 focus:outline-hidden"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[9px] font-bold uppercase text-amber-800 mb-0.5">Years of Connection</label>
+                              <input
+                                type="text"
+                                value={newTeacherYears}
+                                onChange={(e) => setNewTeacherYears(e.target.value)}
+                                placeholder="e.g. 2022 - 2026 or 4 Years"
+                                className="w-full px-2.5 py-1.5 text-xs border border-amber-200 rounded-lg bg-white text-amber-955 focus:outline-hidden"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-[9px] font-bold uppercase text-amber-800 mb-0.5">Teacher's Best Advice *</label>
+                            <input
+                              type="text"
+                              value={newTeacherAdvice}
+                              onChange={(e) => setNewTeacherAdvice(e.target.value)}
+                              placeholder="e.g. Focus on understanding concepts instead of marks."
+                              className="w-full px-2.5 py-1.5 text-xs border border-amber-200 rounded-lg bg-white text-amber-955 focus:outline-hidden"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[9px] font-bold uppercase text-amber-800 mb-0.5">Favorite Memory / Message *</label>
+                            <textarea
+                              rows={2}
+                              value={newTeacherMemory}
+                              onChange={(e) => setNewTeacherMemory(e.target.value)}
+                              placeholder="Share your tribute memory..."
+                              className="w-full px-2.5 py-1.5 text-xs border border-amber-200 rounded-lg bg-white text-amber-955 placeholder:text-amber-800/30 focus:outline-hidden"
+                            />
+                          </div>
+
+                          <div className="flex gap-2 justify-end pt-1">
+                            <button
+                              type="button"
+                              onClick={() => setIsCustomTeacherFormOpen(false)}
+                              className="px-3 py-1.5 text-xs font-semibold text-amber-700 hover:underline cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleAddCustomTeacherToWall}
+                              className="px-3.5 py-1.5 bg-amber-800 hover:bg-amber-900 text-white font-bold text-xs uppercase tracking-wider rounded-lg transition-colors cursor-pointer"
+                            >
+                              Add Teacher
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setIsCustomTeacherFormOpen(true)}
+                          className="w-full py-2.5 border border-dashed border-amber-300 hover:border-amber-500 text-amber-800 hover:text-amber-955 font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer bg-amber-50/5 hover:bg-amber-50/20"
+                        >
+                          <Plus size={13} className="text-amber-700 animate-pulse" />
+                          + Add Custom Teacher to Wall
+                        </button>
+                      )}
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isGeneratingWall}
+                      className="w-full py-3 bg-amber-800 hover:bg-amber-900 text-white font-bold text-xs uppercase tracking-widest rounded-lg transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      {editModeWallId 
+                        ? (isGeneratingWall ? "Updating Wall..." : "Save Wall Changes") 
+                        : (isGeneratingWall ? "Generating Wall..." : "Generate Wall Link")}
+                    </button>
+                  </form>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* CLAIM OWNERSHIP MODAL */}
+        <AnimatePresence>
+          {isClaimOwnershipOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsClaimOwnershipOpen(false)}
+                className="fixed inset-0 bg-amber-955/35 backdrop-blur-xs cursor-pointer"
+              />
+
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 15 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 15 }}
+                transition={{ type: "spring", duration: 0.4 }}
+                className="relative w-full max-w-sm bg-white border-2 border-amber-250 rounded-2xl shadow-2xl p-6 z-10 flex flex-col diary-page"
+              >
+                <button
+                  onClick={() => setIsClaimOwnershipOpen(false)}
+                  className="absolute top-4 right-4 text-amber-800/60 hover:text-amber-955 transition-colors cursor-pointer"
+                >
+                  <X size={16} />
+                </button>
+
+                <div className="text-center space-y-4">
+                  <div className="w-12 h-12 rounded-full bg-amber-50 flex items-center justify-center mx-auto text-amber-600 border border-amber-200 shadow-2xs">
+                    <User size={20} className="stroke-[1.5]" />
+                  </div>
+
+                  <div className="space-y-1">
+                    <h3 className="font-serif text-lg font-bold text-amber-955">Verify Wall Ownership</h3>
+                    <p className="text-xs text-amber-800/60 leading-normal px-2">
+                      Enter the secret **Edit Key** generated when this wall was created to unlock edit and delete controls.
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleClaimOwnershipSubmit} className="space-y-3 pt-2 text-left">
+                    <div className="space-y-1">
+                      <input
+                        type="text"
+                        required
+                        value={claimEditKeyInput}
+                        onChange={(e) => {
+                          setClaimEditKeyInput(e.target.value);
+                          if (claimEditKeyError) setClaimEditKeyError(false);
+                        }}
+                        placeholder="e.g. EDIT-XXXXXX"
+                        className={`w-full px-3.5 py-2 text-xs text-center font-mono border ${
+                          claimEditKeyError ? "border-red-400 focus:ring-red-400" : "border-amber-200 focus:ring-amber-400"
+                        } bg-[#fffdfa] rounded-lg text-amber-955 placeholder:text-amber-800/30 focus:outline-hidden focus:ring-2`}
+                        autoFocus
+                      />
+                      {claimEditKeyError && (
+                        <p className="text-[10px] text-red-600 font-semibold text-center mt-1">
+                          Incorrect Edit Key! Please try again.
+                        </p>
+                      )}
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="w-full py-2.5 bg-amber-800 hover:bg-amber-900 text-white font-bold text-xs uppercase tracking-wider rounded-lg transition-colors shadow-xs cursor-pointer"
+                    >
+                      Verify Key
+                    </button>
+                  </form>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* CONFIRM DELETE MODAL */}
+        <AnimatePresence>
+          {isConfirmDeleteOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsConfirmDeleteOpen(false)}
+                className="fixed inset-0 bg-red-955/20 backdrop-blur-xs cursor-pointer"
+              />
+
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 15 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 15 }}
+                className="relative w-full max-w-sm bg-white border-2 border-red-200 rounded-2xl shadow-2xl p-6 z-10 flex flex-col text-center space-y-5"
+              >
+                <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mx-auto text-red-600 border border-red-200 shadow-2xs">
+                  <Trash2 size={20} className="stroke-[1.5]" />
+                </div>
+
+                <div className="space-y-2">
+                  <h3 className="font-serif text-lg font-bold text-red-955">Delete Tribute Wall?</h3>
+                  <p className="text-xs text-red-800/60 leading-normal px-2">
+                    Are you sure you want to delete **"{loadedWall.title}"**? This action is permanent and cannot be undone.
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-2 pt-2">
+                  <button
+                    onClick={handleDeleteWallSubmit}
+                    disabled={isDeletingWall}
+                    className="w-full py-2.5 bg-red-700 hover:bg-red-800 text-white font-bold text-xs uppercase tracking-widest rounded-lg transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
+                  >
+                    {isDeletingWall ? "Deleting..." : "Yes, Delete Permanently"}
+                  </button>
+                  <button
+                    onClick={() => setIsConfirmDeleteOpen(false)}
+                    className="w-full py-2 text-xs font-semibold text-neutral-600 hover:underline cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* TOAST ALERTS SYSTEM */}
+        <AnimatePresence>
+          {showToast && (
+            <motion.div
+              initial={{ opacity: 0, y: 30, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 30, scale: 0.95 }}
+              className="fixed bottom-6 right-6 z-55 bg-amber-955 text-amber-50 px-4 py-3 rounded-xl border border-amber-900 shadow-xl flex items-center gap-2 text-xs font-semibold max-w-sm"
+            >
+              <Sparkles size={14} className="text-amber-400 animate-pulse" />
+              <span>{toastMessage}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }
@@ -3038,9 +3838,11 @@ export default function Home() {
                 <X size={16} />
               </button>
 
-              <div className="overflow-y-auto p-6 md:p-8 space-y-6 scroll-smooth">
+              <div className="overflow-y-auto p-6 md:p-8 space-y-6 scroll-smooth flex-1 min-h-0">
                 <div className="text-center space-y-1 pb-2 border-b border-amber-50">
-                  <h3 className="font-serif text-2xl font-extrabold text-amber-955">Create Your Tribute Wall</h3>
+                  <h3 className="font-serif text-2xl font-extrabold text-amber-955">
+                    {editModeWallId ? "Edit Tribute Wall" : "Create Your Tribute Wall"}
+                  </h3>
                   <p className="text-xs text-amber-800/60 leading-normal">
                     Bundle your favorite teacher tributes into a personalized wall space.
                   </p>
@@ -3076,9 +3878,38 @@ export default function Home() {
                         }}
                         className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider rounded-lg transition-colors cursor-pointer"
                       >
-                        Copy
+                        Copy Link
                       </button>
                     </div>
+
+                    {createdWallEditKey && (
+                      <div className="p-3.5 bg-amber-50/50 border border-amber-200 rounded-xl space-y-1.5 text-left">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 block">⚠️ Keep this secret Edit Key</span>
+                        <p className="text-[10px] text-amber-800/70 leading-normal">
+                          You will need this key to edit or delete your tribute wall in the future (especially from another browser/device):
+                        </p>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            readOnly
+                            value={createdWallEditKey}
+                            onClick={(e) => e.currentTarget.select()}
+                            className="flex-1 px-2.5 py-1 text-xs border border-amber-300 bg-white rounded-lg text-amber-900 font-mono select-all focus:outline-hidden"
+                          />
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(createdWallEditKey);
+                              setToastMessage("Edit Key copied!");
+                              setShowToast(true);
+                              setTimeout(() => setShowToast(false), 2000);
+                            }}
+                            className="px-2.5 py-1 bg-amber-700 hover:bg-amber-800 text-white font-bold text-[10px] uppercase tracking-wider rounded-lg transition-colors cursor-pointer"
+                          >
+                            Copy Key
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
                     <div className="pt-4 flex justify-center gap-2">
                       <a
@@ -3088,10 +3919,13 @@ export default function Home() {
                         View Wall Now
                       </a>
                       <button
-                        onClick={() => setCreatedWallLink("")}
+                        onClick={() => {
+                          setCreatedWallLink("");
+                          setCreatedWallEditKey("");
+                        }}
                         className="px-4 py-2 text-xs font-semibold text-amber-700 hover:underline cursor-pointer"
                       >
-                        Create Another
+                        Done
                       </button>
                     </div>
                   </div>
@@ -3175,8 +4009,8 @@ export default function Home() {
                       </label>
                       
                       <div className="border border-amber-100 rounded-xl max-h-[180px] overflow-y-auto p-3 bg-amber-50/10 space-y-2">
-                        {teachers.map(teacher => {
-                          const isSelected = selectedTeacherIds.includes(teacher.id);
+                        {[...teachers, ...customWallTeachers].map(teacher => {
+                          const isSelected = selectedTeacherIds.includes(teacher.id || "");
                           return (
                             <label
                               key={teacher.id}
@@ -3193,7 +4027,7 @@ export default function Home() {
                                   if (isSelected) {
                                     setSelectedTeacherIds(selectedTeacherIds.filter(id => id !== teacher.id));
                                   } else {
-                                    setSelectedTeacherIds([...selectedTeacherIds, teacher.id]);
+                                    setSelectedTeacherIds([...selectedTeacherIds, teacher.id || ""]);
                                   }
                                 }}
                                 className="accent-amber-700 cursor-pointer"
@@ -3208,12 +4042,129 @@ export default function Home() {
                       </div>
                     </div>
 
+                    {/* Custom Teacher Creator Inline Form */}
+                    <div className="space-y-2 pt-1">
+                      {isCustomTeacherFormOpen ? (
+                        <div className="border border-amber-200 p-4 rounded-xl space-y-4 bg-amber-50/10 text-left">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 block pb-1 border-b border-amber-200/50">Add Custom Teacher Details</span>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[9px] font-bold uppercase text-amber-800 mb-0.5">Teacher Name *</label>
+                              <input
+                                type="text"
+                                value={newTeacherName}
+                                onChange={(e) => setNewTeacherName(e.target.value)}
+                                placeholder="e.g. Paras Sir"
+                                className="w-full px-2.5 py-1.5 text-xs border border-amber-200 rounded-lg bg-white text-amber-955 focus:outline-hidden"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-bold uppercase text-amber-800 mb-0.5">Subject *</label>
+                              <input
+                                type="text"
+                                value={newTeacherSubject}
+                                onChange={(e) => setNewTeacherSubject(e.target.value)}
+                                placeholder="e.g. DSA"
+                                className="w-full px-2.5 py-1.5 text-xs border border-amber-200 rounded-lg bg-white text-amber-955 focus:outline-hidden"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[9px] font-bold uppercase text-amber-800 mb-0.5">School/College/University *</label>
+                              <input
+                                type="text"
+                                value={newTeacherCollege}
+                                onChange={(e) => setNewTeacherCollege(e.target.value)}
+                                placeholder="e.g. Marwadi University"
+                                className="w-full px-2.5 py-1.5 text-xs border border-amber-200 rounded-lg bg-white text-amber-955 focus:outline-hidden"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-bold uppercase text-amber-800 mb-0.5">Designation</label>
+                              <input
+                                type="text"
+                                value={newTeacherDesignation}
+                                onChange={(e) => setNewTeacherDesignation(e.target.value)}
+                                placeholder="e.g. HOD / Assistant Prof"
+                                className="w-full px-2.5 py-1.5 text-xs border border-amber-200 rounded-lg bg-white text-amber-955 focus:outline-hidden"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[9px] font-bold uppercase text-amber-800 mb-0.5">Years of Connection</label>
+                              <input
+                                type="text"
+                                value={newTeacherYears}
+                                onChange={(e) => setNewTeacherYears(e.target.value)}
+                                placeholder="e.g. 2022 - 2026 or 4 Years"
+                                className="w-full px-2.5 py-1.5 text-xs border border-amber-200 rounded-lg bg-white text-amber-955 focus:outline-hidden"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-[9px] font-bold uppercase text-amber-800 mb-0.5">Teacher's Best Advice *</label>
+                            <input
+                              type="text"
+                              value={newTeacherAdvice}
+                              onChange={(e) => setNewTeacherAdvice(e.target.value)}
+                              placeholder="e.g. Focus on understanding concepts instead of marks."
+                              className="w-full px-2.5 py-1.5 text-xs border border-amber-200 rounded-lg bg-white text-amber-955 focus:outline-hidden"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[9px] font-bold uppercase text-amber-800 mb-0.5">Favorite Memory / Message *</label>
+                            <textarea
+                              rows={2}
+                              value={newTeacherMemory}
+                              onChange={(e) => setNewTeacherMemory(e.target.value)}
+                              placeholder="Share your tribute memory..."
+                              className="w-full px-2.5 py-1.5 text-xs border border-amber-200 rounded-lg bg-white text-amber-955 placeholder:text-amber-800/30 focus:outline-hidden"
+                            />
+                          </div>
+
+                          <div className="flex gap-2 justify-end pt-1">
+                            <button
+                              type="button"
+                              onClick={() => setIsCustomTeacherFormOpen(false)}
+                              className="px-3 py-1.5 text-xs font-semibold text-amber-700 hover:underline cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleAddCustomTeacherToWall}
+                              className="px-3.5 py-1.5 bg-amber-800 hover:bg-amber-900 text-white font-bold text-xs uppercase tracking-wider rounded-lg transition-colors cursor-pointer"
+                            >
+                              Add Teacher
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setIsCustomTeacherFormOpen(true)}
+                          className="w-full py-2.5 border border-dashed border-amber-300 hover:border-amber-500 text-amber-800 hover:text-amber-955 font-bold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer bg-amber-50/5 hover:bg-amber-50/20"
+                        >
+                          <Plus size={13} className="text-amber-700 animate-pulse" />
+                          + Add Custom Teacher to Wall
+                        </button>
+                      )}
+                    </div>
+
                     <button
                       type="submit"
                       disabled={isGeneratingWall}
-                      className="w-full py-3 bg-amber-850 hover:bg-amber-900 text-white font-bold text-xs uppercase tracking-widest rounded-lg transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      className="w-full py-3 bg-amber-800 hover:bg-amber-900 text-white font-bold text-xs uppercase tracking-widest rounded-lg transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
                     >
-                      {isGeneratingWall ? "Generating Wall..." : "Generate Wall Link"}
+                      {editModeWallId 
+                        ? (isGeneratingWall ? "Updating Wall..." : "Save Wall Changes") 
+                        : (isGeneratingWall ? "Generating Wall..." : "Generate Wall Link")}
                     </button>
                   </form>
                 )}
@@ -3260,11 +4211,11 @@ export default function Home() {
                 {isLoadingGallery ? (
                   <div className="text-center py-12 space-y-2">
                     <div className="w-6 h-6 border-2 border-amber-600 border-t-transparent rounded-full animate-spin mx-auto" />
-                    <span className="text-xs text-amber-850/60 font-medium">Fetching public walls...</span>
+                    <span className="text-xs text-amber-800/60 font-medium">Fetching public walls...</span>
                   </div>
                 ) : galleryWalls.length === 0 ? (
                   <div className="text-center py-12 space-y-1">
-                    <p className="text-sm font-semibold text-amber-850/60">No public galleries created yet.</p>
+                    <p className="text-sm font-semibold text-amber-800/60">No public galleries created yet.</p>
                     <p className="text-xs text-amber-800/40">Be the first to build a custom wall!</p>
                   </div>
                 ) : (
@@ -3331,6 +4282,7 @@ export default function Home() {
           </div>
         )}
       </AnimatePresence>
+
 
       {/* TOAST ALERTS SYSTEM */}
       <AnimatePresence>
