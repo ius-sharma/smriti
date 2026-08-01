@@ -1759,18 +1759,6 @@ export default function Home() {
             </button>
 
             <button
-              onClick={() => {
-                setSelectedTeacherIds([]);
-                setCreatedWallLink("");
-                setIsWallBuilderOpen(true);
-              }}
-              className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-amber-900 border border-amber-250 bg-amber-50/20 hover:bg-amber-50 rounded-full shadow-3xs transition-colors duration-205 cursor-pointer"
-            >
-              <Plus size={12} className="text-amber-700" />
-              Build Your Wall
-            </button>
-
-            <button
               onClick={() => setIsCustomModalOpen(true)}
               className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-white bg-amber-800 hover:bg-amber-950 rounded-full shadow-3xs transition-colors duration-205 cursor-pointer"
             >
@@ -1815,16 +1803,21 @@ export default function Home() {
           <div className="mt-10 flex flex-col sm:flex-row gap-3.5 justify-center relative z-20">
             <button
               onClick={() => setIsCustomModalOpen(true)}
-              className="px-6 py-3 bg-amber-800 hover:bg-amber-900 text-white font-bold text-xs uppercase tracking-widest rounded-lg shadow-sm flex items-center justify-center gap-1.5 transition-colors duration-205"
+              className="px-6 py-3 bg-amber-800 hover:bg-amber-900 text-white font-bold text-xs uppercase tracking-widest rounded-lg shadow-sm flex items-center justify-center gap-1.5 transition-colors duration-205 cursor-pointer"
             >
               Wish Your Teacher
             </button>
-            <a
-              href="#wall"
-              className="px-6 py-3 bg-white border border-amber-200 text-amber-955 font-bold text-xs uppercase tracking-widest rounded-lg shadow-3xs flex items-center justify-center gap-1.5"
+            <button
+              onClick={() => {
+                setSelectedTeacherIds([]);
+                setCreatedWallLink("");
+                setIsWallBuilderOpen(true);
+              }}
+              className="px-6 py-3 bg-white border border-amber-255 text-amber-955 hover:bg-amber-50 font-bold text-xs uppercase tracking-widest rounded-lg shadow-3xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
             >
-              View Tribute Wall
-            </a>
+              <Plus size={12} className="text-amber-700" />
+              Build Your Wall
+            </button>
           </div>
         </motion.div>
       </section>
