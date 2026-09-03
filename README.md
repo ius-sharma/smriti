@@ -47,8 +47,6 @@ Open `index.html` in your browser or run it using Live Server.
 └── README.md
 ```
 
-> Replace the image with your own project screenshot.
-
 ## 📄 License
 
 This project is open source and available under the MIT License.
