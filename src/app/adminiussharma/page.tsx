@@ -124,7 +124,7 @@ export default function AdminPage() {
 
     try {
       const currentOrigin = typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
-      const res = await dispatchJanmashtamiBatch({
+      const payload = {
         target: mailerTarget,
         testTeacherId: selectedTeacherId,
         testEmailOverride: mailerTarget === "test_only" ? testEmailOverride : undefined,
@@ -132,7 +132,21 @@ export default function AdminPage() {
         senderEmail: "sharmaeditzayush@gmail.com",
         customMessage: customMailMessage,
         baseUrl: currentOrigin
-      });
+      };
+
+      let res: any;
+      try {
+        // Use direct HTTP API route (immune to Server Action hash mismatch on Vercel)
+        const apiResponse = await fetch("/api/cron/janmashtami-mailer", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        res = await apiResponse.json();
+      } catch {
+        // Fallback to Server Action
+        res = await dispatchJanmashtamiBatch(payload);
+      }
 
       if (res.results && res.results.length > 0) {
         setDeliveryLogs(prev => {
