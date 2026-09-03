@@ -19,6 +19,7 @@ export interface Teacher {
   initials: string;
   avatarColor: string;
   bgPattern: string;
+  gitaLesson?: string;
 }
 
 export const INITIAL_TEACHERS: Teacher[] = [
@@ -39,6 +40,7 @@ export const INITIAL_TEACHERS: Teacher[] = [
     howTheyShaped: "Aaj mai discipline and consistency ko acche se maintain unke vajah se kar pata hu.",
     skillsLearned: "Problem-solving aur critical thinking.",
     favoriteSaying: "Marks to acche le aooge rat ke but skills vo kaha se ayega!!",
+    gitaLesson: "Karmanye Vadhikaraste Ma Phaleshu Kadachana — Seekh aur mehnath par dhyan do, marks aur fal apne aap follow karenge.",
     contactEmail: "paras.shingadiya112363@marwadiuniversity.ac.in",
     initials: "PS",
     avatarColor: "from-amber-100 to-amber-250 text-amber-900 border-amber-300",
@@ -61,6 +63,7 @@ export const INITIAL_TEACHERS: Teacher[] = [
     howTheyShaped: "Unhone mujhe hamesha khus rehna sikhaya.",
     skillsLearned: "Smartly solving the hard problems.",
     favoriteSaying: "Tumhe Placement chahiye ki nahi",
+    gitaLesson: "Samatvam Yoga Uchyate — Har chhati ya mushkil problem ko muskurate huye aur santulit dimag se smartly solve karo.",
     contactEmail: "reshma.sunil@marwadieducation.edu.in",
     initials: "RS",
     avatarColor: "from-amber-250 to-amber-400 text-amber-955 border-amber-400",
@@ -83,6 +86,7 @@ export const INITIAL_TEACHERS: Teacher[] = [
     howTheyShaped: "Unhone mujhe apne goals ke liye bina haar mane kaam karna sikhaya.",
     skillsLearned: "Making best roadmaps and Planning.",
     favoriteSaying: "Main hu na beta aap mujhe batao",
+    gitaLesson: "Vyavasayatmika Buddhir Ekeha — Nishchay aur dedication se apne lakshya par dridh raho, bina haar mane raste khojo.",
     contactEmail: "niraj.bhagchandani@marwadieducation.edu.in",
     initials: "NB",
     avatarColor: "from-amber-50 to-amber-200 text-amber-900 border-amber-300",
@@ -105,6 +109,7 @@ export const INITIAL_TEACHERS: Teacher[] = [
     howTheyShaped: "Abhi unke help se hi mai itte sare projects bana paa rha hu.",
     skillsLearned: "Web Technology.",
     favoriteSaying: "Arey ye itna easy to hai try to karo yaar tum",
+    gitaLesson: "Kuru Karmaiva Tasmat Tvam — Fail ya pass hone ke dar ko chhodkar karma aur prayas karna hi sarvopari hai.",
     contactEmail: "charmy.vora@marwadieducation.edu.in",
     initials: "CV",
     avatarColor: "from-amber-200 to-amber-350 text-amber-955 border-amber-400",
@@ -127,6 +132,7 @@ export const INITIAL_TEACHERS: Teacher[] = [
     howTheyShaped: "Abhi sikhna shuru hi kiya hai, par unki guideship me project dynamic solutions banane ke liye bohot excited hu!",
     skillsLearned: "Mastering logic building for Artificial Intelligence systems.",
     favoriteSaying: "logic build up karo",
+    gitaLesson: "Nahi Jnanena Sadrisham Pavitram Iha Vidyate — Foundation aur gyaan se badhkar sansar me koi doosra satya nahi hai.",
     contactEmail: "dhara.joshi@marwadieducation.edu.in",
     initials: "DJ",
     avatarColor: "from-amber-100 to-amber-300 text-amber-900 border-amber-300",
@@ -149,9 +155,33 @@ export const INITIAL_TEACHERS: Teacher[] = [
     howTheyShaped: "Looking forward to building strong analytical and algorithm design skills under her mentorship this semester.",
     skillsLearned: "Currently learning dry-running and algorithm complexity analysis step-by-step.",
     favoriteSaying: "dry run karke dekho",
+    gitaLesson: "Abhyasena Tu Kaunteya Vairagyena Cha Grihyate — Nirantar abhyas aur patience se hi kathin se kathin algorithms saral bante hain.",
     contactEmail: "kajalben.tanchak@marwadieducation.edu.in",
     initials: "KT",
     avatarColor: "from-amber-200 to-amber-300 text-amber-955 border-amber-450",
     bgPattern: "bg-[radial-gradient(#b45309_0.8px,transparent_0.8px)] [background-size:14px_14px]"
+  },
+  {
+    id: "7",
+    name: "Dr. Arvind Radhakrishnan",
+    salutation: "Arvind Sir",
+    subject: "Distributed Systems & Cloud Architecture",
+    designation: "Associate Professor & Research Chair",
+    college: "Marwadi University",
+    years: "2024 – Present",
+    photo: "",
+    bestAdvice: "A distributed system fails when nodes lose trust; in life as well, trust and communication are your strongest protocols.",
+    favoriteMemory: "Late-night architecture lab review where sir stayed back with us to debug a distributed consensus failure and treated the whole team to chai.",
+    teachingStyle: "First-principles thinking, live whiteboard system architectural design, and deep hands-on debugging.",
+    personality: "Calm, intellectual, deeply insightful, and always approachable.",
+    lifeLesson: "Complex chaos can be engineered into resilient harmony through calm patience.",
+    howTheyShaped: "Taught me how to look at large complex software systems without fear, breaking problems into modular, graceful components.",
+    skillsLearned: "Microservices architecture, consensus algorithms, and fault tolerance.",
+    favoriteSaying: "Trust the protocol, verify the logs, stay grounded.",
+    gitaLesson: "Yogasthah Kuru Karmani — Perform your actions with steadfast equanimity, undisturbed by success or failure.",
+    contactEmail: "arvind.radhakrishnan@marwadieducation.edu.in",
+    initials: "AR",
+    avatarColor: "from-blue-900 to-indigo-950 text-amber-100 border-yellow-500/40",
+    bgPattern: "bg-[radial-gradient(#d4af37_0.8px,transparent_0.8px)] [background-size:14px_14px]"
   }
 ];

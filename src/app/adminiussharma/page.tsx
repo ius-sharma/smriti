@@ -12,9 +12,20 @@ import {
   Eye, 
   ArrowLeft, 
   Clock, 
-  Database 
+  Database,
+  Calendar,
+  Send,
+  Play,
+  Square,
+  CheckCircle2,
+  AlertCircle,
+  RefreshCw,
+  Mail,
+  UserCheck
 } from "lucide-react";
 import { adminGetAllWalls, adminDeleteWall, adminUpdateWall, seedAdminWall } from "../actions/wall";
+import { dispatchJanmashtamiBatch, DispatchResultItem } from "../actions/email";
+import { INITIAL_TEACHERS } from "../data";
 
 export default function AdminPage() {
   // Authentication states
@@ -51,6 +62,136 @@ export default function AdminPage() {
     setShowToast(true);
     setTimeout(() => setShowToast(false), duration);
   };
+
+  // Auto-Mailer states
+  const [activeAdminTab, setActiveAdminTab] = useState<"mailer" | "registry">("mailer");
+  const [mailerTarget, setMailerTarget] = useState<"test_only" | "all_teachers">("test_only");
+  const [testEmailOverride, setTestEmailOverride] = useState("sharmaeditzayush@gmail.com");
+  const [scheduledDate, setScheduledDate] = useState("2026-09-04");
+  const [scheduledTime, setScheduledTime] = useState("18:00");
+  const [isScheduleArmed, setIsScheduleArmed] = useState(false);
+  const [countdownText, setCountdownText] = useState("");
+  const [isInstantSending, setIsInstantSending] = useState(false);
+  const [isAutoSending, setIsAutoSending] = useState(false);
+  const [deliveryLogs, setDeliveryLogs] = useState<DispatchResultItem[]>([]);
+  const [customMailMessage, setCustomMailMessage] = useState(
+    "On this auspicious festival of Shri Krishna Janmashtami, I reflect with profound gratitude on the eternal Guru-Shishya Parampara. Just as Shri Krishna illuminated Arjuna's path in the midst of uncertainty, your guidance, patience, and mentorship have shaped my academic journey. Wishing you and your family abundant peace, joy, and blessings on Janmashtami."
+  );
+
+  // Load scheduler config from localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("smriti_mailer_schedule");
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.scheduledDate) setScheduledDate(parsed.scheduledDate);
+          if (parsed.scheduledTime) setScheduledTime(parsed.scheduledTime);
+          if (parsed.mailerTarget) setMailerTarget(parsed.mailerTarget);
+          if (parsed.testEmailOverride) setTestEmailOverride(parsed.testEmailOverride);
+          if (parsed.customMailMessage) setCustomMailMessage(parsed.customMailMessage);
+          if (typeof parsed.isScheduleArmed === "boolean") setIsScheduleArmed(parsed.isScheduleArmed);
+          if (Array.isArray(parsed.logs)) setDeliveryLogs(parsed.logs);
+        } catch (e) {
+          console.error("Failed to parse smriti_mailer_schedule:", e);
+        }
+      }
+    }
+  }, []);
+
+  // Save schedule state changes to localStorage
+  const persistScheduleState = (armed: boolean) => {
+    setIsScheduleArmed(armed);
+    if (typeof window !== "undefined") {
+      const payload = {
+        scheduledDate,
+        scheduledTime,
+        mailerTarget,
+        testEmailOverride,
+        customMailMessage,
+        isScheduleArmed: armed,
+        logs: deliveryLogs
+      };
+      localStorage.setItem("smriti_mailer_schedule", JSON.stringify(payload));
+    }
+  };
+
+  // Dispatch execution handler
+  const executeBatchDispatch = async (isAuto = false) => {
+    if (isAuto) setIsAutoSending(true);
+    else setIsInstantSending(true);
+
+    try {
+      const currentOrigin = typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
+      const res = await dispatchJanmashtamiBatch({
+        target: mailerTarget,
+        testEmailOverride: mailerTarget === "test_only" ? testEmailOverride : undefined,
+        senderName: "Ayush Sharma",
+        senderEmail: "sharmaeditzayush@gmail.com",
+        customMessage: customMailMessage,
+        baseUrl: currentOrigin
+      });
+
+      if (res.results && res.results.length > 0) {
+        setDeliveryLogs(prev => {
+          const updated = [...res.results, ...prev];
+          if (typeof window !== "undefined") {
+            const saved = localStorage.getItem("smriti_mailer_schedule") || "{}";
+            try {
+              const parsed = JSON.parse(saved);
+              parsed.logs = updated;
+              localStorage.setItem("smriti_mailer_schedule", JSON.stringify(parsed));
+            } catch (e) {}
+          }
+          return updated;
+        });
+      }
+
+      if (res.success) {
+        triggerToast(`Dispatched ${res.totalSent} of ${res.totalTargeted} gratitude emails!`);
+      } else {
+        triggerToast(res.error || "Batch execution finished with errors.");
+      }
+    } catch (err) {
+      console.error(err);
+      triggerToast("Error triggering batch email dispatch.");
+    } finally {
+      setIsInstantSending(false);
+      setIsAutoSending(false);
+    }
+  };
+
+  // Live Countdown & Auto-Trigger Timer
+  useEffect(() => {
+    if (!isScheduleArmed) {
+      setCountdownText("");
+      return;
+    }
+
+    const checkTimer = async () => {
+      const targetDateTimeStr = `${scheduledDate}T${scheduledTime}:00`;
+      const targetTime = new Date(targetDateTimeStr).getTime();
+      const now = Date.now();
+      const diff = targetTime - now;
+
+      if (diff <= 0) {
+        persistScheduleState(false);
+        setCountdownText("Target time reached! Dispatching auto-mailer now...");
+        await executeBatchDispatch(true);
+      } else {
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+        setCountdownText(
+          `${String(hours).padStart(2, "0")}h : ${String(minutes).padStart(2, "0")}m : ${String(seconds).padStart(2, "0")}s remaining`
+        );
+      }
+    };
+
+    checkTimer();
+    const interval = setInterval(checkTimer, 1000);
+    return () => clearInterval(interval);
+  }, [isScheduleArmed, scheduledDate, scheduledTime, mailerTarget, testEmailOverride, customMailMessage]);
 
   // Check session storage on mount
   useEffect(() => {
@@ -320,177 +461,741 @@ export default function AdminPage() {
       {/* DASHBOARD BODY */}
       <main className="max-w-6xl mx-auto py-12 px-6 space-y-8">
         
-        {/* STATS OVERVIEW CARDS */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-[#fffdfa] border border-amber-200 p-5 rounded-xl shadow-2xs flex items-center gap-4 text-left">
-            <div className="p-3.5 bg-amber-50 border border-amber-100 rounded-lg text-amber-700">
-              <Database size={20} className="stroke-[1.5]" />
-            </div>
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800/50 block">Total Tribute Walls</span>
-              <span className="font-serif text-2xl font-black text-amber-950">{totalWalls}</span>
-            </div>
+        {/* TOP NAVIGATION TABS */}
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-amber-200/80 pb-4">
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => setActiveAdminTab("mailer")}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                activeAdminTab === "mailer"
+                  ? "bg-[#78350f] text-white shadow-sm border border-[#451a03]"
+                  : "bg-white text-[#78350f] hover:text-[#451a03] border-2 border-amber-300 hover:bg-amber-50"
+              }`}
+            >
+              <Sparkles size={14} className={activeAdminTab === "mailer" ? "text-amber-200" : "text-amber-600"} />
+              <span>Janmashtami Auto-Mailer</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                activeAdminTab === "mailer" ? "bg-amber-800 text-amber-100" : "bg-amber-100 text-amber-900"
+              }`}>
+                4 Sep Special
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveAdminTab("registry")}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                activeAdminTab === "registry"
+                  ? "bg-[#78350f] text-white shadow-sm border border-[#451a03]"
+                  : "bg-white text-[#78350f] hover:text-[#451a03] border-2 border-amber-300 hover:bg-amber-50"
+              }`}
+            >
+              <Database size={14} className={activeAdminTab === "registry" ? "text-amber-200" : "text-amber-600"} />
+              <span>Sanctuary Registry &amp; Walls</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                activeAdminTab === "registry" ? "bg-amber-800 text-amber-100" : "bg-amber-100 text-amber-900"
+              }`}>
+                {totalWalls}
+              </span>
+            </button>
           </div>
 
-          <div className="bg-[#fffdfa] border border-amber-200 p-5 rounded-xl shadow-2xs flex items-center gap-4 text-left">
-            <div className="p-3.5 bg-emerald-50 border border-emerald-100 rounded-lg text-emerald-700">
-              <Sparkles size={20} className="stroke-[1.5]" />
-            </div>
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800/50 block">Public Directories</span>
-              <span className="font-serif text-2xl font-black text-emerald-950">{publicWalls}</span>
-            </div>
-          </div>
-
-          <div className="bg-[#fffdfa] border border-amber-200 p-5 rounded-xl shadow-2xs flex items-center gap-4 text-left">
-            <div className="p-3.5 bg-indigo-50 border border-indigo-100 rounded-lg text-indigo-700">
-              <Lock size={20} className="stroke-[1.5]" />
-            </div>
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-800/50 block">Private / Locked</span>
-              <span className="font-serif text-2xl font-black text-indigo-950">{privateWalls}</span>
-            </div>
-          </div>
+          <a
+            href="/"
+            className="text-xs font-bold text-[#78350f] hover:text-[#451a03] flex items-center gap-1.5 transition-colors"
+          >
+            <ArrowLeft size={13} />
+            Back to Tribute Sanctuary
+          </a>
         </div>
 
-        {/* SEARCH AND DIRECTORY SECTION */}
-        <div className="bg-[#fffdfa] border border-amber-200 p-6 md:p-8 rounded-2xl shadow-xs space-y-6">
-          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
-            <div className="text-left space-y-1">
-              <h3 className="font-serif text-xl font-bold text-amber-955">Sanctuary Registry</h3>
-              <p className="text-xs text-amber-800/50">Manage custom tribute walls, verify edit keys, and audit database content.</p>
-            </div>
+        {/* TAB 1: JANMASHTAMI AUTO-MAILER CONSOLE */}
+        {activeAdminTab === "mailer" && (
+          <div className="space-y-8">
+            {/* HERO STATUS BANNER (HIGH CONTRAST SMRITI THEME) */}
+            <div className="bg-white border-2 border-amber-300 rounded-2xl p-6 sm:p-8 shadow-sm relative overflow-hidden">
+              <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-amber-500 via-amber-600 to-amber-500" />
+              
+              <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative z-10">
+                <div className="space-y-2.5 max-w-2xl text-left">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-amber-100 text-amber-950 border border-amber-400 shadow-2xs font-sans">
+                      Guru-Shishya Parampara • 4 September 2026
+                    </span>
+                    <span className="text-xs font-bold text-amber-900">
+                      Automated Tribute Engine
+                    </span>
+                  </div>
+                  <h2 className="font-serif text-2xl sm:text-3xl font-extrabold text-[#1c150c] tracking-tight">
+                    Janmashtami Mentor Tribute Scheduler
+                  </h2>
+                  <p className="text-sm text-neutral-800 leading-relaxed font-sans font-medium">
+                    Schedule automated gratitude emails to your mentors for 6:00 PM today without missing, or test instant delivery with Dr. Arvind Radhakrishnan.
+                  </p>
+                </div>
 
-            <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-              <button
-                type="button"
-                onClick={handleSeedAdminWall}
-                disabled={isSeeding}
-                className="flex items-center justify-center gap-1.5 px-8 h-10 min-w-[200px] text-xs font-bold uppercase tracking-wider rounded-xl bg-amber-800 hover:bg-amber-900 text-white cursor-pointer transition-colors shadow-2xs disabled:opacity-50"
-              >
-                <Sparkles size={13} className="text-amber-200" />
-                <span>{isSeeding ? "Seeding..." : "Seed Admin's Wall"}</span>
-              </button>
-
-              {/* Registry Search */}
-              <div className="relative w-full md:max-w-xs">
-                <Search size={14} className="absolute left-3 top-[13px] text-amber-800/40 pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder="Search by Title, Creator or ID..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 h-10 text-xs border border-amber-200 bg-white rounded-xl text-amber-955 placeholder:text-amber-800/35 focus:outline-hidden"
-                />
+                {/* STATUS BADGE / COUNTDOWN CLOCK */}
+                <div className="w-full lg:w-auto shrink-0">
+                  {isScheduleArmed ? (
+                    <div className="bg-emerald-50 border-2 border-emerald-600 rounded-2xl p-5 text-center shadow-sm space-y-2 min-w-[240px]">
+                      <div className="flex items-center justify-center gap-2">
+                        <span className="relative flex h-3 w-3">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-600"></span>
+                        </span>
+                        <span className="text-xs font-black uppercase tracking-wider text-emerald-950">
+                          Auto-Scheduler Armed
+                        </span>
+                      </div>
+                      <div className="font-mono text-2xl font-black text-emerald-950 tracking-wider">
+                        {countdownText || "Calculating..."}
+                      </div>
+                      <div className="text-xs text-emerald-900 font-bold">
+                        Target: {scheduledDate} at {scheduledTime} IST
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => persistScheduleState(false)}
+                        className="mt-2 w-full py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold uppercase tracking-wider rounded-lg transition-colors cursor-pointer shadow-sm"
+                      >
+                        Disarm Scheduler
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="bg-amber-50/90 border-2 border-amber-300 rounded-2xl p-5 text-center space-y-1.5 shadow-sm min-w-[240px]">
+                      <span className="text-xs font-black uppercase tracking-wider text-amber-900 block">
+                        Scheduler Status
+                      </span>
+                      <div className="font-serif text-xl font-black text-[#1c150c]">
+                        Standby Mode
+                      </div>
+                      <p className="text-xs text-neutral-700 max-w-[210px] mx-auto leading-normal font-semibold">
+                        Arm the scheduler below to activate precision auto-dispatch.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* TABLE OF WALLS */}
-          {isLoading ? (
-            <div className="text-center py-20 space-y-2">
-              <div className="w-8 h-8 border-3 border-amber-600 border-t-transparent rounded-full animate-spin mx-auto" />
-              <span className="text-xs text-amber-800/60 font-semibold block">Accessing central ledger...</span>
-            </div>
-          ) : filteredWalls.length === 0 ? (
-            <div className="text-center py-16">
-              <p className="text-xs text-amber-800/50 italic">No tribute walls found matching your registry query.</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto border border-amber-100 rounded-xl">
-              <table className="w-full text-left border-collapse bg-white">
-                <thead>
-                  <tr className="bg-amber-50/60 border-b border-amber-100 text-[10px] font-bold uppercase tracking-wider text-amber-900/80">
-                    <th className="p-4">Wall Info</th>
-                    <th className="p-4">Visibility</th>
-                    <th className="p-4">Secret Edit Key</th>
-                    <th className="p-4">Tributes</th>
-                    <th className="p-4">Audit Logs</th>
-                    <th className="p-4 text-center">Controls</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-amber-50 text-xs">
-                  {filteredWalls.map((wall) => {
-                    const tributesCount = Array.isArray(wall.tributes) 
-                      ? wall.tributes.length 
-                      : (typeof wall.tributes === 'object' && wall.tributes !== null) 
-                        ? Object.keys(wall.tributes).length 
-                        : 0;
+            {/* CONFIGURATION GRID */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              {/* LEFT: TIMING & TARGET SETTINGS */}
+              <div className="lg:col-span-6 bg-[#fffdfa] border border-amber-200 p-6 sm:p-8 rounded-2xl shadow-xs space-y-6">
+                <div className="border-b border-amber-100 pb-3">
+                  <h3 className="font-serif text-lg font-bold text-amber-955 flex items-center gap-2">
+                    <Clock size={16} className="text-amber-700" />
+                    Target Mentors & Timing
+                  </h3>
+                  <p className="text-xs text-amber-800/60 mt-0.5">
+                    Select who receives the emails and set the exact delivery schedule.
+                  </p>
+                </div>
 
-                    const formattedDate = new Date(wall.created_at).toLocaleDateString('en-IN', {
-                      dateStyle: 'medium'
-                    });
+                {/* 1. Target Selector */}
+                <div className="space-y-3">
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-amber-900 block">
+                    1. Select Recipients
+                  </label>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <label
+                      onClick={() => setMailerTarget("test_only")}
+                      className={`p-3.5 rounded-xl border cursor-pointer transition-all flex flex-col justify-between space-y-1 ${
+                        mailerTarget === "test_only"
+                          ? "bg-blue-50/70 border-blue-600/60 text-blue-955 shadow-2xs"
+                          : "bg-white border-amber-200/80 text-amber-900/80 hover:bg-amber-50/40"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-xs">Test Teacher Only</span>
+                        <input
+                          type="radio"
+                          name="mailerTarget"
+                          checked={mailerTarget === "test_only"}
+                          onChange={() => setMailerTarget("test_only")}
+                          className="accent-[#1e3a5f]"
+                        />
+                      </div>
+                      <span className="text-[11px] text-blue-900/70">
+                        Dr. Arvind Radhakrishnan (Sample Mentor)
+                      </span>
+                    </label>
 
-                    return (
-                      <tr key={wall.id} className="hover:bg-amber-50/10 transition-colors">
-                        <td className="p-4 text-left">
-                          <div className="font-bold text-amber-955">{wall.title}</div>
-                          <div className="text-[10px] text-amber-850/60">By {wall.creator_name}</div>
-                          <div className="text-[9px] font-mono text-amber-800/40 select-all">{wall.id}</div>
-                        </td>
-                        
-                        <td className="p-4 uppercase">
-                          <span className={`px-2 py-0.5 text-[9px] font-bold rounded-full ${
-                            wall.visibility === 'public' 
-                              ? 'bg-emerald-50 text-emerald-800 border border-emerald-100'
-                              : wall.visibility === 'password'
-                                ? 'bg-rose-50 text-rose-800 border border-rose-100'
-                                : 'bg-indigo-50 text-indigo-800 border border-indigo-100'
-                          }`}>
-                            {wall.visibility}
+                    <label
+                      onClick={() => setMailerTarget("all_teachers")}
+                      className={`p-3.5 rounded-xl border cursor-pointer transition-all flex flex-col justify-between space-y-1 ${
+                        mailerTarget === "all_teachers"
+                          ? "bg-amber-50 border-amber-600 text-amber-955 shadow-2xs"
+                          : "bg-white border-amber-200/80 text-amber-900/80 hover:bg-amber-50/40"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-xs">All Faculty Mentors</span>
+                        <input
+                          type="radio"
+                          name="mailerTarget"
+                          checked={mailerTarget === "all_teachers"}
+                          onChange={() => setMailerTarget("all_teachers")}
+                          className="accent-amber-800"
+                        />
+                      </div>
+                      <span className="text-[11px] text-amber-900/70">
+                        All 7 Faculty Profiles in Smriti
+                      </span>
+                    </label>
+                  </div>
+
+                  {/* Test Email Override Input */}
+                  {mailerTarget === "test_only" && (
+                    <div className="pt-2">
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-blue-950 block mb-1">
+                        Test Delivery Email (Your Personal Inbox)
+                      </label>
+                      <div className="relative">
+                        <Mail size={14} className="absolute left-3 top-3 text-blue-800/50" />
+                        <input
+                          type="email"
+                          value={testEmailOverride}
+                          onChange={(e) => setTestEmailOverride(e.target.value)}
+                          placeholder="sharmaeditzayush@gmail.com"
+                          className="w-full pl-9 pr-3 py-2 text-xs border border-blue-200 bg-blue-50/30 rounded-lg text-blue-950 focus:outline-hidden focus:ring-2 focus:ring-blue-400"
+                        />
+                      </div>
+                      {/* Quick recipient chips */}
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        <span className="text-[10px] text-blue-900/70 font-semibold self-center">Quick Target:</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTestEmailOverride("sharmasldayush@gmail.com");
+                            triggerToast("Target set to sharmasldayush@gmail.com");
+                          }}
+                          className={`text-[10px] px-2 py-0.5 rounded-md border font-mono transition-colors cursor-pointer ${
+                            testEmailOverride === "sharmasldayush@gmail.com"
+                              ? "bg-blue-600 text-white border-blue-700"
+                              : "bg-blue-100/60 text-blue-900 border-blue-200 hover:bg-blue-200/60"
+                          }`}
+                        >
+                          sharmasldayush@gmail.com
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTestEmailOverride("sharmaeditzayush@gmail.com");
+                            triggerToast("Target set to sharmaeditzayush@gmail.com");
+                          }}
+                          className={`text-[10px] px-2 py-0.5 rounded-md border font-mono transition-colors cursor-pointer ${
+                            testEmailOverride === "sharmaeditzayush@gmail.com"
+                              ? "bg-blue-600 text-white border-blue-700"
+                              : "bg-blue-100/60 text-blue-900 border-blue-200 hover:bg-blue-200/60"
+                          }`}
+                        >
+                          sharmaeditzayush@gmail.com
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTestEmailOverride("arvind.radhakrishnan@marwadieducation.edu.in");
+                            triggerToast("Target set to Dr. Arvind's college email");
+                          }}
+                          className={`text-[10px] px-2 py-0.5 rounded-md border font-mono transition-colors cursor-pointer ${
+                            testEmailOverride === "arvind.radhakrishnan@marwadieducation.edu.in"
+                              ? "bg-blue-600 text-white border-blue-700"
+                              : "bg-blue-100/60 text-blue-900 border-blue-200 hover:bg-blue-200/60"
+                          }`}
+                        >
+                          arvind.radhakrishnan@marwadieducation.edu.in
+                        </button>
+                      </div>
+
+                      <p className="text-[10px] text-blue-800/70 mt-1.5">
+                        Send to any email above for verification, or select &quot;All Faculty Mentors&quot; to send to all professors!
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. Date & Time Scheduler */}
+                <div className="space-y-3 pt-2">
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-amber-900 block">
+                    2. Dispatch Schedule
+                  </label>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-bold uppercase text-amber-800/70 block mb-1">
+                        Scheduled Date
+                      </label>
+                      <input
+                        type="date"
+                        value={scheduledDate}
+                        onChange={(e) => setScheduledDate(e.target.value)}
+                        className="w-full px-3 py-2 text-xs border border-amber-250 bg-white rounded-lg text-amber-955 focus:outline-hidden"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold uppercase text-amber-800/70 block mb-1">
+                        Exact Time (IST)
+                      </label>
+                      <input
+                        type="time"
+                        value={scheduledTime}
+                        onChange={(e) => setScheduledTime(e.target.value)}
+                        className="w-full px-3 py-2 text-xs border border-amber-250 bg-white rounded-lg text-amber-955 focus:outline-hidden font-mono font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Quick Preset Buttons */}
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <span className="text-[10px] font-bold uppercase text-amber-800/60">Presets:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setScheduledDate("2026-09-04");
+                        setScheduledTime("18:00");
+                        triggerToast("Set schedule to Today 6:00 PM!");
+                      }}
+                      className="px-2.5 py-1 text-[11px] font-semibold bg-amber-100 hover:bg-amber-200/80 text-amber-900 border border-amber-300/80 rounded-md transition-colors cursor-pointer"
+                    >
+                      Today at 6:00 PM
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const now = new Date();
+                        now.setMinutes(now.getMinutes() + 2);
+                        const yyyy = now.getFullYear();
+                        const mm = String(now.getMonth() + 1).padStart(2, "0");
+                        const dd = String(now.getDate()).padStart(2, "0");
+                        const hh = String(now.getHours()).padStart(2, "0");
+                        const min = String(now.getMinutes()).padStart(2, "0");
+                        setScheduledDate(`${yyyy}-${mm}-${dd}`);
+                        setScheduledTime(`${hh}:${min}`);
+                        triggerToast(`Preset armed for test in 2 minutes (${hh}:${min})!`);
+                      }}
+                      className="px-2.5 py-1 text-[11px] font-semibold bg-blue-100 hover:bg-blue-200/80 text-blue-950 border border-blue-300 rounded-md transition-colors cursor-pointer"
+                    >
+                      In 2 Mins (Auto Test)
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const now = new Date();
+                        now.setSeconds(now.getSeconds() + 30);
+                        const yyyy = now.getFullYear();
+                        const mm = String(now.getMonth() + 1).padStart(2, "0");
+                        const dd = String(now.getDate()).padStart(2, "0");
+                        const hh = String(now.getHours()).padStart(2, "0");
+                        const min = String(now.getMinutes()).padStart(2, "0");
+                        setScheduledDate(`${yyyy}-${mm}-${dd}`);
+                        setScheduledTime(`${hh}:${min}`);
+                        triggerToast(`Preset armed for quick test (${hh}:${min})!`);
+                      }}
+                      className="px-2.5 py-1 text-[11px] font-semibold bg-emerald-100 hover:bg-emerald-200/80 text-emerald-950 border border-emerald-300 rounded-md transition-colors cursor-pointer"
+                    >
+                      Quick Test (Next Min)
+                    </button>
+                  </div>
+                </div>
+
+                {/* 3. Action Control Bar */}
+                <div className="pt-4 border-t border-amber-100 space-y-3">
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    {/* Instant Dispatch Button */}
+                    <button
+                      type="button"
+                      disabled={isInstantSending || isAutoSending}
+                      onClick={() => executeBatchDispatch(false)}
+                      className="flex-1 py-3 px-4 bg-amber-800 hover:bg-amber-950 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-colors shadow-2xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      {isInstantSending ? (
+                        <>
+                          <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          <span>Dispatching Mail...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Send size={13} className="text-amber-200" />
+                          <span>
+                            {mailerTarget === "test_only" 
+                              ? `Send Instant Test Mail (${testEmailOverride ? testEmailOverride.split("@")[0] : "Test"})` 
+                              : "Send Instant Mail to All 7 Mentors"}
                           </span>
-                        </td>
-                        
-                        <td className="p-4 font-mono font-bold text-amber-900 select-all">
-                          {wall.edit_key || "N/A"}
-                        </td>
-                        
-                        <td className="p-4 font-semibold text-amber-800">
-                          {tributesCount} tribute(s)
-                        </td>
-                        
-                        <td className="p-4 text-[10px] text-amber-800/60">
-                          <div className="flex items-center gap-1">
-                            <Clock size={10} />
-                            <span>{formattedDate}</span>
-                          </div>
-                        </td>
+                        </>
+                      )}
+                    </button>
 
-                        <td className="p-4 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            <a
-                              href={`/?wall=${wall.id}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="p-1.5 hover:bg-amber-50 text-amber-700 hover:text-amber-900 rounded-lg transition-colors cursor-pointer"
-                              title="Preview Live Wall"
-                            >
-                              <Eye size={14} />
-                            </a>
-                            <button
-                              onClick={() => startEdit(wall)}
-                              className="p-1.5 hover:bg-amber-50 text-amber-700 hover:text-amber-900 rounded-lg transition-colors cursor-pointer"
-                              title="Edit Wall Metadata"
-                            >
-                              <Edit3 size={14} />
-                            </button>
-                            <button
-                              onClick={() => setDeletingWallId(wall.id)}
-                              className="p-1.5 hover:bg-red-50 text-red-600 hover:text-red-800 rounded-lg transition-colors cursor-pointer"
-                              title="Delete Permanently"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    {/* Arm / Disarm Button */}
+                    {isScheduleArmed ? (
+                      <button
+                        type="button"
+                        onClick={() => persistScheduleState(false)}
+                        className="py-3 px-5 bg-red-700 hover:bg-red-800 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-colors shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <Square size={13} />
+                        <span>Cancel Schedule</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          persistScheduleState(true);
+                          triggerToast(`Auto-scheduler armed for ${scheduledDate} at ${scheduledTime}!`);
+                        }}
+                        className="py-3 px-5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-colors shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <Play size={13} />
+                        <span>Arm Auto-Schedule</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* RIGHT: MESSAGE PERSONALIZATION & LIVE PREVIEW */}
+              <div className="lg:col-span-6 bg-[#fffdfa] border border-amber-200 p-6 sm:p-8 rounded-2xl shadow-xs space-y-5">
+                <div className="border-b border-amber-100 pb-3">
+                  <h3 className="font-serif text-lg font-bold text-amber-955 flex items-center gap-2">
+                    <Sparkles size={16} className="text-amber-700" />
+                    Gratitude Message & Email Preview
+                  </h3>
+                  <p className="text-xs text-amber-800/60 mt-0.5">
+                    Personalized tribute content formatted in Janmashtami Vrindavan aesthetics.
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-amber-900 block">
+                    Custom Tribute Message Body
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={customMailMessage}
+                    onChange={(e) => setCustomMailMessage(e.target.value)}
+                    className="w-full px-3.5 py-2.5 text-xs border border-amber-200 bg-white rounded-xl text-amber-955 focus:outline-hidden focus:ring-2 focus:ring-amber-400 leading-relaxed"
+                  />
+                </div>
+
+                {/* Visual Preview Box */}
+                <div className="space-y-1.5 pt-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800/70 block">
+                    Recipient Inbox Preview
+                  </span>
+                  
+                  <div className="bg-white border border-[#e8e2d5] rounded-xl overflow-hidden shadow-2xs text-xs">
+                    <div className="bg-gradient-to-r from-[#091322] via-[#1e3a5f] to-[#091322] px-4 py-3.5 border-b-2 border-[#d4af37] text-center text-white">
+                      <div className="text-[11px] uppercase font-bold tracking-wider text-yellow-300">
+                        Shri Krishna Janmashtami • 2026
+                      </div>
+                      <div className="text-[11px] text-slate-200 font-serif italic mt-0.5">
+                        The Sacred Guru-Shishya Parampara
+                      </div>
+                    </div>
+
+                    <div className="p-4 space-y-3 bg-[#faf9f5]">
+                      <p className="font-serif text-sm font-semibold text-[#1c150c]">
+                        Respected {mailerTarget === "test_only" ? "Arvind Sir" : "[Teacher Name]"} Ji,
+                      </p>
+
+                      <p className="text-neutral-700 leading-relaxed text-xs">
+                        {customMailMessage}
+                      </p>
+
+                      <div className="bg-[#fefdf8] border-l-3 border-[#b45309] border border-[#fef3c7] p-2.5 rounded-r-lg text-amber-900 leading-relaxed text-[11px]">
+                        <span className="font-bold text-[10px] text-[#92400e] block uppercase tracking-wider mb-0.5">Krishnam Vande Jagadgurum • Sacred Wisdom</span>
+                        <em>&ldquo;Yogasthah kuru karmani — Perform your duty with steadfast equanimity...&rdquo;</em>
+                      </div>
+
+                      <div className="pt-2 border-t border-[#e8e2d5] text-[11px] text-neutral-600 flex items-center justify-between">
+                        <span>With sincere pranam: <strong className="text-[#1c150c]">Ayush Sharma</strong></span>
+                        <span className="text-neutral-400 text-[10px]">Smriti &copy; 2026</span>
+                      </div>
+
+                      <div className="pt-2 border-t border-dashed border-[#e8e2d5] text-center">
+                        <span className="text-[11px] text-amber-800 underline font-serif italic">
+                          View interactive Janmashtami card &amp; send blessings &rarr;
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-          )}
-        </div>
+
+            {/* DELIVERY LOGS & AUDIT CONSOLE */}
+            <div className="bg-[#fffdfa] border border-amber-200 p-6 sm:p-8 rounded-2xl shadow-xs space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div>
+                  <h3 className="font-serif text-lg font-bold text-amber-955 flex items-center gap-2">
+                    <UserCheck size={16} className="text-amber-700" />
+                    Delivery Receipts & Audit Log
+                  </h3>
+                  <p className="text-xs text-amber-800/60 mt-0.5">
+                    Real-time logs of test and automated mail dispatches.
+                  </p>
+                </div>
+
+                {deliveryLogs.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeliveryLogs([]);
+                      if (typeof window !== "undefined") {
+                        const saved = localStorage.getItem("smriti_mailer_schedule") || "{}";
+                        try {
+                          const parsed = JSON.parse(saved);
+                          parsed.logs = [];
+                          localStorage.setItem("smriti_mailer_schedule", JSON.stringify(parsed));
+                        } catch (e) {}
+                      }
+                      triggerToast("Delivery logs cleared.");
+                    }}
+                    className="px-3 py-1.5 text-xs text-amber-700 hover:text-amber-900 border border-amber-200 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
+                  >
+                    Clear Logs
+                  </button>
+                )}
+              </div>
+
+              {deliveryLogs.length === 0 ? (
+                <div className="text-center py-10 border border-dashed border-amber-200 rounded-xl bg-amber-50/20">
+                  <Mail className="mx-auto text-amber-400 stroke-[1.25] mb-2" size={24} />
+                  <p className="text-xs text-amber-900/60 font-medium">No dispatch events recorded yet.</p>
+                  <p className="text-[11px] text-amber-800/40 mt-0.5">Click &ldquo;Send Instant Test Mail&rdquo; to test live delivery!</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto border border-amber-150 rounded-xl">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-amber-100/50 border-b border-amber-200 text-amber-900 text-[10px] uppercase tracking-wider font-bold">
+                        <th className="p-3">Mentor</th>
+                        <th className="p-3">Recipient Email</th>
+                        <th className="p-3">Status</th>
+                        <th className="p-3">Timestamp</th>
+                        <th className="p-3">Receipt / Details</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-amber-100 bg-white">
+                      {deliveryLogs.map((log, idx) => (
+                        <tr key={idx} className="hover:bg-amber-50/40 transition-colors">
+                          <td className="p-3 font-semibold text-amber-955">{log.teacherName}</td>
+                          <td className="p-3 text-amber-900/80 font-mono text-[11px]">{log.recipientEmail}</td>
+                          <td className="p-3">
+                            {log.success ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                <CheckCircle2 size={11} />
+                                Delivered
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-300">
+                                <AlertCircle size={11} />
+                                Failed
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3 text-amber-800/60 text-[11px]">
+                            {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                          </td>
+                          <td className="p-3 font-mono text-[11px] text-amber-900/70">
+                            {log.messageId ? `ID: ${log.messageId}` : (log.error || "Completed")}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 2: SANCTUARY REGISTRY & WALLS */}
+        {activeAdminTab === "registry" && (
+          <div className="space-y-8">
+            {/* STATS OVERVIEW CARDS */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-[#fffdfa] border border-amber-200 p-5 rounded-xl shadow-2xs flex items-center gap-4 text-left">
+                <div className="p-3.5 bg-amber-50 border border-amber-100 rounded-lg text-amber-700">
+                  <Database size={20} className="stroke-[1.5]" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800/50 block">Total Tribute Walls</span>
+                  <span className="font-serif text-2xl font-black text-amber-950">{totalWalls}</span>
+                </div>
+              </div>
+
+              <div className="bg-[#fffdfa] border border-amber-200 p-5 rounded-xl shadow-2xs flex items-center gap-4 text-left">
+                <div className="p-3.5 bg-emerald-50 border border-emerald-100 rounded-lg text-emerald-700">
+                  <Sparkles size={20} className="stroke-[1.5]" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800/50 block">Public Directories</span>
+                  <span className="font-serif text-2xl font-black text-emerald-950">{publicWalls}</span>
+                </div>
+              </div>
+
+              <div className="bg-[#fffdfa] border border-amber-200 p-5 rounded-xl shadow-2xs flex items-center gap-4 text-left">
+                <div className="p-3.5 bg-indigo-50 border border-indigo-100 rounded-lg text-indigo-700">
+                  <Lock size={20} className="stroke-[1.5]" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-800/50 block">Private / Locked</span>
+                  <span className="font-serif text-2xl font-black text-indigo-950">{privateWalls}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* SEARCH AND DIRECTORY SECTION */}
+            <div className="bg-[#fffdfa] border border-amber-200 p-6 md:p-8 rounded-2xl shadow-xs space-y-6">
+              <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+                <div className="text-left space-y-1">
+                  <h3 className="font-serif text-xl font-bold text-amber-955">Sanctuary Registry</h3>
+                  <p className="text-xs text-amber-800/50">Manage custom tribute walls, verify edit keys, and audit database content.</p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+                  <button
+                    type="button"
+                    onClick={handleSeedAdminWall}
+                    disabled={isSeeding}
+                    className="flex items-center justify-center gap-1.5 px-8 h-10 min-w-[200px] text-xs font-bold uppercase tracking-wider rounded-xl bg-amber-800 hover:bg-amber-900 text-white cursor-pointer transition-colors shadow-2xs disabled:opacity-50"
+                  >
+                    <Sparkles size={13} className="text-amber-200" />
+                    <span>{isSeeding ? "Seeding..." : "Seed Admin's Wall"}</span>
+                  </button>
+
+                  {/* Registry Search */}
+                  <div className="relative w-full md:max-w-xs">
+                    <Search size={14} className="absolute left-3 top-[13px] text-amber-800/40 pointer-events-none" />
+                    <input
+                      type="text"
+                      placeholder="Search by Title, Creator or ID..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-9 pr-4 h-10 text-xs border border-amber-200 bg-white rounded-xl text-amber-955 placeholder:text-amber-800/35 focus:outline-hidden"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* TABLE OF WALLS */}
+              {isLoading ? (
+                <div className="flex flex-col items-center justify-center py-20 space-y-3">
+                  <div className="w-6 h-6 border-2 border-amber-800 border-t-transparent rounded-full animate-spin" />
+                  <span className="text-xs font-bold text-amber-800/60 uppercase tracking-widest">Accessing Secure Database...</span>
+                </div>
+              ) : filteredWalls.length === 0 ? (
+                <div className="text-center py-16 border border-dashed border-amber-200 rounded-xl bg-amber-50/20">
+                  <p className="text-xs text-amber-800/50 font-medium">No matching tribute records found in database.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto border border-amber-200/80 rounded-xl">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-amber-50/80 border-b border-amber-200 text-amber-900 text-[10px] uppercase tracking-wider font-bold">
+                        <th className="p-4">Tribute Wall Title</th>
+                        <th className="p-4">Creator</th>
+                        <th className="p-4">Theme</th>
+                        <th className="p-4">Visibility</th>
+                        <th className="p-4">Edit Key</th>
+                        <th className="p-4">Created</th>
+                        <th className="p-4 text-center">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-amber-100 text-xs font-medium">
+                      {filteredWalls.map((wall) => {
+                        const formattedDate = wall.created_at 
+                          ? new Date(wall.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                          : "N/A";
+
+                        return (
+                          <tr key={wall.id} className="hover:bg-amber-50/30 transition-colors">
+                            <td className="p-4">
+                              <div className="font-bold text-amber-955">{wall.title}</div>
+                              <div className="text-[10px] text-amber-800/40 font-mono">{wall.id}</div>
+                            </td>
+
+                            <td className="p-4 text-amber-900/80">
+                              {wall.creator_name || "Anonymous"}
+                            </td>
+
+                            <td className="p-4 capitalize">
+                              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                                wall.theme === "emerald" ? "bg-emerald-100 text-emerald-800" :
+                                wall.theme === "royal" ? "bg-indigo-100 text-indigo-800" :
+                                wall.theme === "mystic" ? "bg-neutral-800 text-neutral-200" :
+                                wall.theme === "vrindavan" ? "bg-blue-900 text-amber-100" :
+                                "bg-amber-100 text-amber-800"
+                              }`}>
+                                {wall.theme || "amber"}
+                              </span>
+                            </td>
+
+                            <td className="p-4">
+                              {wall.is_locked ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded">
+                                  <Lock size={10} /> Password
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
+                                  {wall.visibility || "public"}
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="p-4 font-mono text-[11px] text-amber-900/70">
+                              {wall.edit_key || "None"}
+                            </td>
+                            
+                            <td className="p-4 text-[10px] text-amber-800/60">
+                              <div className="flex items-center gap-1">
+                                <Clock size={10} />
+                                <span>{formattedDate}</span>
+                              </div>
+                            </td>
+
+                            <td className="p-4 text-center">
+                              <div className="flex items-center justify-center gap-2">
+                                <a
+                                  href={`/?wall=${wall.id}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="p-1.5 hover:bg-amber-50 text-amber-700 hover:text-amber-900 rounded-lg transition-colors cursor-pointer"
+                                  title="Preview Live Wall"
+                                >
+                                  <Eye size={14} />
+                                </a>
+                                <button
+                                  onClick={() => startEdit(wall)}
+                                  className="p-1.5 hover:bg-amber-50 text-amber-700 hover:text-amber-900 rounded-lg transition-colors cursor-pointer"
+                                  title="Edit Wall Metadata"
+                                >
+                                  <Edit3 size={14} />
+                                </button>
+                                <button
+                                  onClick={() => setDeletingWallId(wall.id)}
+                                  className="p-1.5 hover:bg-red-50 text-red-600 hover:text-red-800 rounded-lg transition-colors cursor-pointer"
+                                  title="Delete Permanently"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </main>
 
       {/* ADMIN EDIT WALL DETAILS MODAL */}
@@ -566,6 +1271,7 @@ export default function AdminPage() {
                       <option value="emerald">Emerald</option>
                       <option value="royal">Royal</option>
                       <option value="mystic">Mystic</option>
+                      <option value="vrindavan">Vrindavan</option>
                     </select>
                   </div>
                 </div>

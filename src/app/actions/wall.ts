@@ -3,6 +3,9 @@
 import { supabase } from "../lib/supabase";
 import { Teacher, INITIAL_TEACHERS } from "../data";
 
+const ALLOWED_THEMES = ["amber", "emerald", "royal", "mystic", "vrindavan"] as const;
+type WallTheme = typeof ALLOWED_THEMES[number];
+
 interface CreateWallParams {
   creatorName: string;
   title: string;

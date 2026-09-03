@@ -235,6 +235,7 @@ export default function GalleriesPage() {
                     if (wall.theme === "emerald") themeDot = "bg-emerald-500";
                     if (wall.theme === "royal") themeDot = "bg-indigo-500";
                     if (wall.theme === "mystic") themeDot = "bg-neutral-800";
+                    if (wall.theme === "vrindavan") themeDot = "bg-blue-900 border border-yellow-400";
 
                     return (
                       <div
@@ -309,6 +310,7 @@ export default function GalleriesPage() {
                     if (wall.theme === "emerald") themeDot = "bg-emerald-500";
                     if (wall.theme === "royal") themeDot = "bg-indigo-500";
                     if (wall.theme === "mystic") themeDot = "bg-neutral-800";
+                    if (wall.theme === "vrindavan") themeDot = "bg-blue-900 border border-yellow-400";
 
                     return (
                       <div

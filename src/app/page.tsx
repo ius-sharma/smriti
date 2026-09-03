@@ -124,12 +124,23 @@ const FESTIVALS: Festival[] = [
   { name: "Diwali", nameHindi: "दीपावली", date: "2027-10-29T00:00:00+05:30", description: "The festival of lights." }
 ];
 
+// Helper to determine if current date is within Janmashtami week (through Sept 7)
+export const isJanmashtamiSeason = () => {
+  const now = new Date();
+  // Month is 0-indexed (8 = September)
+  // Visible during Janmashtami week through Sept 7
+  return now.getMonth() === 8 && now.getDate() <= 7;
+};
+
 export default function Home() {
   // General app state
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSubject, setSelectedSubject] = useState("All");
   const [activeTeacher, setActiveTeacher] = useState<Teacher | null>(null);
+
+  // Janmashtami Banner dismissal state
+  const [isJanmashtamiBannerDismissed, setIsJanmashtamiBannerDismissed] = useState(false);
 
   // Festival countdown states
   const [upcomingFestival, setUpcomingFestival] = useState<Festival | null>(null);
@@ -146,7 +157,7 @@ export default function Home() {
   const [isWallBuilderOpen, setIsWallBuilderOpen] = useState(false);
   const [wallCreatorName, setWallCreatorName] = useState("");
   const [wallTitle, setWallTitle] = useState("");
-  const [wallTheme, setWallTheme] = useState("amber"); // "amber", "emerald", "royal", "mystic"
+  const [wallTheme, setWallTheme] = useState("amber"); // "amber", "emerald", "royal", "mystic", "vrindavan"
   const [wallVisibility, setWallVisibility] = useState("public"); // "public", "private", "password"
   const [wallPassword, setWallPassword] = useState("");
   const [selectedTeacherIds, setSelectedTeacherIds] = useState<string[]>([]);
@@ -280,6 +291,12 @@ export default function Home() {
           const latest = INITIAL_TEACHERS.find(init => init.id === t.id);
           return latest ? latest : t;
         });
+        // Also ensure any newly added initial teachers (like Teacher 7) are included
+        INITIAL_TEACHERS.forEach(init => {
+          if (!synced.some(t => t.id === init.id)) {
+            synced.push(init);
+          }
+        });
         setTeachers(synced);
         localStorage.setItem("smriti_tributes", JSON.stringify(synced));
       } catch (e) {
@@ -297,6 +314,42 @@ export default function Home() {
         setLastGeneratedTeacher(savedTeacher);
       }
     }
+  }, []);
+
+  // Global background watcher for armed Janmashtami auto-mailer
+  useEffect(() => {
+    const checkBackgroundSchedule = async () => {
+      if (typeof window === "undefined") return;
+      const saved = localStorage.getItem("smriti_mailer_schedule");
+      if (!saved) return;
+      try {
+        const parsed = JSON.parse(saved);
+        if (!parsed.isScheduleArmed) return;
+
+        const targetTime = new Date(`${parsed.scheduledDate}T${parsed.scheduledTime}:00`).getTime();
+        if (Date.now() >= targetTime) {
+          parsed.isScheduleArmed = false;
+          localStorage.setItem("smriti_mailer_schedule", JSON.stringify(parsed));
+          
+          await fetch("/api/cron/janmashtami-mailer", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              target: parsed.mailerTarget,
+              testEmailOverride: parsed.testEmailOverride,
+              senderName: "Ayush Sharma",
+              senderEmail: "sharmaeditzayush@gmail.com",
+              customMessage: parsed.customMailMessage
+            })
+          });
+        }
+      } catch (e) {
+        console.error("Background schedule check error:", e);
+      }
+    };
+
+    const timer = setInterval(checkBackgroundSchedule, 5000);
+    return () => clearInterval(timer);
   }, []);
 
   // Parse URL query parameter on load
@@ -1059,7 +1112,7 @@ using this Edit Key from the Student Galleries panel.
     if (e) e.stopPropagation(); // prevent grid card triggers
     
     if (typeof window !== "undefined") {
-      const isPredefined = ["1", "2", "3", "4", "5", "6"].includes(teacher.id);
+      const isPredefined = ["1", "2", "3", "4", "5", "6", "7"].includes(teacher.id);
       if (isPredefined) {
         setToastMessage("Sharing links for Guiding Lights is disabled.");
         setShowToast(true);
@@ -1080,7 +1133,8 @@ using this Edit Key from the Student Galleries panel.
       "3": "niraj",
       "4": "charmy",
       "5": "dhara",
-      "6": "kajal"
+      "6": "kajal",
+      "7": "arvind"
     };
     const slug = slugMap[teacher.id] || teacher.name.split(" ")[0].toLowerCase();
     const link = `${window.location.origin}?teacher=${slug}`;
@@ -1194,10 +1248,15 @@ using this Edit Key from the Student Galleries panel.
     triggerConfetti();
   };
 
-  // Triggers gold/amber confetti explosion
+  // Triggers confetti explosion (Janmashtami peacock palette vs standard gold/amber)
   const triggerConfetti = () => {
     const duration = 2.5 * 1000;
     const end = Date.now() + duration;
+    const isFestive = isJanmashtamiSeason();
+    // Janmashtami Confetti: Peacock blue (#1e3a5f), emerald green (#10b981), and gold (#fbbf24)
+    const activeColors = isFestive
+      ? ["#1e3a5f", "#10b981", "#fbbf24"]
+      : ["#f59e0b", "#ffffff", "#d97706"];
 
     const frame = () => {
       confetti({
@@ -1205,14 +1264,14 @@ using this Edit Key from the Student Galleries panel.
         angle: 60,
         spread: 55,
         origin: { x: 0 },
-        colors: ["#f59e0b", "#fff", "#d97706"]
+        colors: activeColors
       });
       confetti({
         particleCount: 4,
         angle: 120,
         spread: 55,
         origin: { x: 1 },
-        colors: ["#f59e0b", "#fff", "#d97706"]
+        colors: activeColors
       });
 
       if (Date.now() < end) {
@@ -1832,9 +1891,16 @@ using this Edit Key from the Student Galleries panel.
       bgClass = "bg-neutral-900";
       textColorClass = "text-neutral-50";
       subTextColorClass = "text-neutral-400";
-      accentClass = "bg-amber-500 hover:bg-amber-600 text-neutral-950";
+      accentClass = "bg-amber-500 hover:bg-amber-600 text-neutral-955";
       borderClass = "border-neutral-800";
       cardClass = "bg-neutral-800 border-neutral-750 hover:border-amber-500/50 text-neutral-100";
+    } else if (loadedWall.theme === "vrindavan") {
+      bgClass = "bg-blue-950";
+      textColorClass = "text-amber-100";
+      subTextColorClass = "text-amber-200/80";
+      accentClass = "bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-blue-950 font-bold";
+      borderClass = "border-yellow-500/30";
+      cardClass = "bg-[#0f1d3b]/90 border-yellow-500/30 hover:border-yellow-400/60 text-amber-50 shadow-md";
     }
 
     return (
@@ -2067,6 +2133,201 @@ using this Edit Key from the Student Galleries panel.
                       </div>
                     </div>
                   </div>
+
+                  {/* Gita Darshan & Guru Wisdom Section */}
+                  {activeTeacher.gitaLesson && (
+                    <div className="mt-6 bg-gradient-to-br from-[#0f1d3b] to-[#1e3a5f] text-amber-100 p-5 rounded-xl border border-yellow-500/40 relative overflow-hidden shadow-sm">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Sparkles size={14} className="text-yellow-300" />
+                        <span className="text-[10px] uppercase font-bold tracking-widest text-yellow-300">
+                          Guru-Shishya Darshan • Sacred Wisdom
+                        </span>
+                      </div>
+                      <p className="font-serif italic text-xs sm:text-sm text-amber-50 leading-relaxed">
+                        &ldquo;{activeTeacher.gitaLesson}&rdquo;
+                      </p>
+                    </div>
+                  )}
+
+                  {/* SEND NOTE OF APPRECIATION (SHUBH SANDESH) */}
+                  <div className="mt-6 pt-6 border-t border-amber-200/70">
+                    <div className="bg-gradient-to-br from-[#fffdf7] via-amber-50/40 to-[#fffdf5] border border-amber-200/90 rounded-2xl p-5 sm:p-6 shadow-2xs space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600 flex items-center gap-1.5">
+                            <Heart size={12} className="text-rose-500 fill-rose-500" />
+                            Sacred Gratitude Offering
+                          </span>
+                          <h4 className="font-serif text-lg font-bold text-amber-955 mt-0.5 flex items-center gap-1.5">
+                            Send Note of Appreciation
+                            {isJanmashtamiSeason() && (
+                              <span className="text-[10px] font-sans font-semibold bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5 rounded-full">
+                                Shubh Sandesh
+                              </span>
+                            )}
+                          </h4>
+                          <p className="text-xs text-amber-800/70 mt-0.5">
+                            Send a direct tribute note to {activeTeacher.name}&apos;s inbox.
+                          </p>
+                        </div>
+
+                        {!isThankYouFormOpen && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsThankYouFormOpen(true);
+                              const tName = activeTeacher.salutation || activeTeacher.name;
+                              const sName = senderName.trim() || "[Student Name]";
+                              if (!thankYouMessage) {
+                                setThankYouMessage(`Respected ${tName} Ji, just as Lord Krishna's wisdom illuminated Arjuna's path, your guidance has shaped my journey. Wishing you a very Happy Janmashtami. With deep gratitude, ${sName}.`);
+                              }
+                            }}
+                            className="px-4 py-2.5 bg-gradient-to-r from-amber-700 to-amber-900 hover:from-amber-800 hover:to-amber-955 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-xs hover:shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
+                          >
+                            <Mail size={14} />
+                            <span>Write Note</span>
+                          </button>
+                        )}
+                      </div>
+
+                      {isThankYouFormOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="space-y-4 pt-2"
+                        >
+                          {/* PRE-WRITTEN GRATITUDE TEMPLATES */}
+                          <div className="bg-white/90 border border-amber-200/80 rounded-xl p-3.5 sm:p-4 space-y-2.5">
+                            <div className="flex items-center justify-between flex-wrap gap-2">
+                              <span className="text-[11px] font-bold uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+                                <BookOpen size={12} className="text-amber-700" />
+                                Shubh Sandesh Templates (Click to apply)
+                              </span>
+                              <span className="text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                                One-Click Auto Fill
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-amber-800/70 leading-normal">
+                              Choose a Janmashtami gratitude template or customize your own message below:
+                            </p>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const tName = activeTeacher.salutation || activeTeacher.name;
+                                  const sName = senderName.trim() || "[Student Name]";
+                                  setThankYouMessage(`Respected ${tName} Ji, just as Lord Krishna's wisdom illuminated Arjuna's path, your guidance has shaped my journey. Wishing you a very Happy Janmashtami. With deep gratitude, ${sName}.`);
+                                }}
+                                className="text-left p-3 rounded-lg border border-amber-200/90 bg-[#fffdf8] hover:bg-amber-50/80 hover:border-amber-400/80 transition-all text-xs text-amber-955 space-y-1 cursor-pointer group shadow-3xs"
+                              >
+                                <div className="font-bold text-[11px] text-amber-800 group-hover:text-amber-950 flex items-center gap-1.5">
+                                  <Sparkle size={11} className="text-amber-700" />
+                                  Template 1: Wisdom of Lord Krishna
+                                </div>
+                                <p className="text-[11px] text-amber-900/75 italic line-clamp-3 leading-relaxed">
+                                  &ldquo;Respected {activeTeacher.salutation || activeTeacher.name} Ji, just as Lord Krishna&apos;s wisdom illuminated Arjuna&apos;s path, your guidance has shaped my journey. Wishing you a very Happy Janmashtami. With deep gratitude, {senderName || "[Student Name]"}.&rdquo;
+                                </p>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const tName = activeTeacher.salutation || activeTeacher.name;
+                                  setThankYouMessage(`Namaste ${tName} Ji, on this auspicious day of Janmashtami, I want to thank you for being a true mentor and guiding light in my academic life. Happy Janmashtami!`);
+                                }}
+                                className="text-left p-3 rounded-lg border border-amber-200/90 bg-[#fffdf8] hover:bg-amber-50/80 hover:border-amber-400/80 transition-all text-xs text-amber-955 space-y-1 cursor-pointer group shadow-3xs"
+                              >
+                                <div className="font-bold text-[11px] text-amber-800 group-hover:text-amber-950 flex items-center gap-1.5">
+                                  <Award size={11} className="text-amber-700" />
+                                  Template 2: Guiding Light & Mentor
+                                </div>
+                                <p className="text-[11px] text-amber-900/75 italic line-clamp-3 leading-relaxed">
+                                  &ldquo;Namaste {activeTeacher.salutation || activeTeacher.name} Ji, on this auspicious day of Janmashtami, I want to thank you for being a true mentor and guiding light in my academic life. Happy Janmashtami!&rdquo;
+                                </p>
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* FORM */}
+                          <form onSubmit={handleSendThankYou} className="space-y-3.5">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div>
+                                <label className="block text-[10px] font-bold uppercase text-amber-800 mb-1">Your Name *</label>
+                                <input
+                                  type="text"
+                                  required
+                                  value={senderName}
+                                  onChange={(e) => setSenderName(e.target.value)}
+                                  placeholder="e.g. Ayush Sharma"
+                                  className="w-full px-3 py-2 text-xs border border-amber-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 rounded-lg text-amber-955 bg-white"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-bold uppercase text-amber-800 mb-1">Your Email (for replies) *</label>
+                                <input
+                                  type="email"
+                                  required
+                                  value={senderEmail}
+                                  onChange={(e) => setSenderEmail(e.target.value)}
+                                  placeholder="student@example.com"
+                                  className="w-full px-3 py-2 text-xs border border-amber-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 rounded-lg text-amber-955 bg-white"
+                                />
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-bold uppercase text-amber-800 mb-1">
+                                Your Gratitude Message *
+                              </label>
+                              <textarea
+                                required
+                                rows={4}
+                                value={thankYouMessage}
+                                onChange={(e) => setThankYouMessage(e.target.value)}
+                                placeholder="Write your note or select a Shubh Sandesh template above..."
+                                className="w-full px-3 py-2.5 text-xs border border-amber-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 rounded-lg text-amber-955 bg-white leading-relaxed"
+                              />
+                            </div>
+
+                            <div className="flex items-center justify-between gap-3 pt-1">
+                              <button
+                                type="button"
+                                onClick={() => setIsThankYouFormOpen(false)}
+                                className="text-xs text-amber-800/60 hover:text-amber-900 underline cursor-pointer"
+                              >
+                                Close Form
+                              </button>
+
+                              <button
+                                type="submit"
+                                disabled={isSendingNote}
+                                className="px-5 py-2.5 bg-gradient-to-r from-amber-700 to-amber-900 hover:from-amber-800 hover:to-amber-955 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                              >
+                                {isSendingNote ? (
+                                  <>
+                                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                    <span>Sending Note...</span>
+                                  </>
+                                ) : noteSentStatus ? (
+                                  <>
+                                    <CheckCircle2 size={14} className="text-emerald-300" />
+                                    <span>Note Delivered!</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Send size={13} />
+                                    <span>Send Note to {activeTeacher.name}</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </form>
+                        </motion.div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </motion.div>
             </div>
@@ -2148,6 +2409,7 @@ using this Edit Key from the Student Galleries panel.
                             <option value="emerald">Emerald Forest (Calm)</option>
                             <option value="royal">Royal Velvet (Premium)</option>
                             <option value="mystic">Mystic Charcoal (Dark)</option>
+                            <option value="vrindavan">Vrindavan (Limited-Edition Peacock & Gold)</option>
                           </select>
                         </div>
                         <div>
@@ -2530,6 +2792,10 @@ using this Edit Key from the Student Galleries panel.
       bgClass = "bg-neutral-900";
       textColorClass = "text-neutral-50";
       borderClass = "border-neutral-800";
+    } else if (wallMetadata.theme === "vrindavan") {
+      bgClass = "bg-blue-950";
+      textColorClass = "text-amber-100";
+      borderClass = "border-yellow-500/30";
     }
 
     return (
@@ -2644,7 +2910,7 @@ using this Edit Key from the Student Galleries panel.
 
             <button
               onClick={() => setIsCustomModalOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-white bg-amber-800 hover:bg-amber-950 rounded-full shadow-3xs transition-colors duration-205 cursor-pointer"
+              className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-white bg-amber-800 hover:bg-amber-955 rounded-full shadow-3xs transition-colors duration-205 cursor-pointer"
             >
               Wish Your Teacher
             </button>
@@ -2703,6 +2969,44 @@ using this Edit Key from the Student Galleries panel.
               Build Your Wall
             </button>
           </div>
+
+          {/* GURU-SHISHYA PARAMPARA SPECIAL FESTIVE ANNOUNCEMENT */}
+          {isJanmashtamiSeason() && !isJanmashtamiBannerDismissed && (
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+              className="mt-12 max-w-2xl mx-auto bg-gradient-to-r from-[#fffdf5] via-[#fefbe8] to-[#fffdf5] border border-[#d4af37]/60 rounded-2xl p-5 sm:p-6 shadow-sm relative overflow-hidden text-center diary-page-curl select-text"
+            >
+              <div className="absolute top-0 inset-x-0 h-0.5 bg-gradient-to-r from-transparent via-[#d4af37] to-transparent" />
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="text-center sm:text-left space-y-1.5">
+                  <span className="inline-block text-[10px] uppercase font-bold tracking-widest px-2.5 py-0.5 rounded-full bg-[#1e3a5f] text-amber-100 border border-[#d4af37]/40">
+                    Guru-Shishya Parampara
+                  </span>
+                  <p className="font-serif text-sm sm:text-base text-[#1e3a5f] font-medium leading-relaxed">
+                    Celebrating the Eternal Guru-Shishya Parampara. Just as Shri Krishna guided Arjuna, our mentors illuminate our path.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <a
+                    href="#wall"
+                    className="px-4 py-2 bg-[#1e3a5f] hover:bg-[#152a45] text-amber-200 hover:text-white border border-[#d4af37]/40 rounded-xl text-xs font-semibold uppercase tracking-wider transition-colors shadow-xs"
+                  >
+                    Honor a Mentor
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setIsJanmashtamiBannerDismissed(true)}
+                    className="p-1 text-[#1e3a5f]/60 hover:text-[#1e3a5f] transition-colors cursor-pointer"
+                    title="Dismiss"
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
         </motion.div>
       </section>
 
@@ -2939,7 +3243,7 @@ using this Edit Key from the Student Galleries panel.
                       {teacher.years}
                     </span>
                     <div className="flex items-center gap-2">
-                      {!["1", "2", "3", "4", "5", "6"].includes(teacher.id) && (
+                      {!["1", "2", "3", "4", "5", "6", "7"].includes(teacher.id) && (
                         <button
                           onClick={(e) => handleCopyLink(teacher, e)}
                           title="Copy shareable link"
@@ -3023,6 +3327,14 @@ using this Edit Key from the Student Galleries panel.
                 <Mail size={16} />
               </a>
             </div>
+            <div className="pt-1">
+              <a 
+                href="/adminiussharma" 
+                className="text-[11px] font-semibold text-amber-300/40 hover:text-amber-200 transition-colors inline-flex items-center gap-1"
+              >
+                <span>Janmashtami Auto-Mailer &amp; Admin Console &rarr;</span>
+              </a>
+            </div>
           </div>
 
           <div className="text-[10px] text-amber-800/40 uppercase tracking-widest">
@@ -3063,7 +3375,7 @@ using this Edit Key from the Student Galleries panel.
                   Back
                 </button>
 
-                {!["1", "2", "3", "4", "5", "6"].includes(activeTeacher.id) && (
+                {!["1", "2", "3", "4", "5", "6", "7"].includes(activeTeacher.id) && (
                   <button
                     onClick={() => handleCopyLink(activeTeacher)}
                     className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-amber-750 hover:text-amber-900 border border-amber-200 bg-white rounded-md transition-all shadow-3xs"
@@ -3252,6 +3564,206 @@ using this Edit Key from the Student Galleries panel.
                         </p>
                       </motion.div>
                     )}
+
+                    {/* Gita Darshan & Guru Wisdom Section */}
+                    {activeTeacher.gitaLesson && (
+                      <motion.div 
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.35 }}
+                        className="bg-gradient-to-br from-[#0f1d3b] to-[#1e3a5f] text-amber-100 p-5 rounded-xl border border-yellow-500/40 relative overflow-hidden shadow-sm"
+                      >
+                        <div className="flex items-center gap-2 mb-2">
+                          <Sparkles size={14} className="text-yellow-300" />
+                          <span className="text-[10px] uppercase font-bold tracking-widest text-yellow-300">
+                            Guru-Shishya Darshan • Sacred Wisdom
+                          </span>
+                        </div>
+                        <p className="font-serif italic text-xs sm:text-sm text-amber-50 leading-relaxed">
+                          &ldquo;{activeTeacher.gitaLesson}&rdquo;
+                        </p>
+                      </motion.div>
+                    )}
+
+                    {/* SEND NOTE OF APPRECIATION (SHUBH SANDESH) */}
+                    <div className="pt-6 border-t border-amber-200/70">
+                      <div className="bg-gradient-to-br from-[#fffdf7] via-amber-50/40 to-[#fffdf5] border border-amber-200/90 rounded-2xl p-5 sm:p-6 shadow-2xs space-y-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div>
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600 flex items-center gap-1.5">
+                              <Heart size={12} className="text-rose-500 fill-rose-500" />
+                              Sacred Gratitude Offering
+                            </span>
+                            <h4 className="font-serif text-lg font-bold text-amber-955 mt-0.5 flex items-center gap-1.5">
+                              Send Note of Appreciation
+                              {isJanmashtamiSeason() && (
+                                <span className="text-[10px] font-sans font-semibold bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5 rounded-full">
+                                  Shubh Sandesh
+                                </span>
+                              )}
+                            </h4>
+                            <p className="text-xs text-amber-800/70 mt-0.5">
+                              Send a direct tribute note to {activeTeacher.name}&apos;s inbox.
+                            </p>
+                          </div>
+
+                          {!isThankYouFormOpen && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsThankYouFormOpen(true);
+                                const tName = activeTeacher.salutation || activeTeacher.name;
+                                const sName = senderName.trim() || "[Student Name]";
+                                if (!thankYouMessage) {
+                                  setThankYouMessage(`Respected ${tName} Ji, just as Lord Krishna's wisdom illuminated Arjuna's path, your guidance has shaped my journey. Wishing you a very Happy Janmashtami. With deep gratitude, ${sName}.`);
+                                }
+                              }}
+                              className="px-4 py-2.5 bg-gradient-to-r from-amber-700 to-amber-900 hover:from-amber-800 hover:to-amber-955 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-xs hover:shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
+                            >
+                              <Mail size={14} />
+                              <span>Write Note</span>
+                            </button>
+                          )}
+                        </div>
+
+                        {isThankYouFormOpen && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="space-y-4 pt-2"
+                          >
+                            {/* PRE-WRITTEN GRATITUDE TEMPLATES */}
+                            <div className="bg-white/90 border border-amber-200/80 rounded-xl p-3.5 sm:p-4 space-y-2.5">
+                              <div className="flex items-center justify-between flex-wrap gap-2">
+                                <span className="text-[11px] font-bold uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+                                  <BookOpen size={12} className="text-amber-700" />
+                                  Shubh Sandesh Templates (Click to apply)
+                                </span>
+                                <span className="text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                                  One-Click Auto Fill
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-amber-800/70 leading-normal">
+                                Choose a Janmashtami gratitude template or customize your own message below:
+                              </p>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const tName = activeTeacher.salutation || activeTeacher.name;
+                                    const sName = senderName.trim() || "[Student Name]";
+                                    setThankYouMessage(`Respected ${tName} Ji, just as Lord Krishna's wisdom illuminated Arjuna's path, your guidance has shaped my journey. Wishing you a very Happy Janmashtami. With deep gratitude, ${sName}.`);
+                                  }}
+                                  className="text-left p-3 rounded-lg border border-amber-200/90 bg-[#fffdf8] hover:bg-amber-50/80 hover:border-amber-400/80 transition-all text-xs text-amber-955 space-y-1 cursor-pointer group shadow-3xs"
+                                >
+                                  <div className="font-bold text-[11px] text-amber-800 group-hover:text-amber-950 flex items-center gap-1.5">
+                                    <Sparkle size={11} className="text-amber-700" />
+                                    Template 1: Wisdom of Lord Krishna
+                                  </div>
+                                  <p className="text-[11px] text-amber-900/75 italic line-clamp-3 leading-relaxed">
+                                    &ldquo;Respected {activeTeacher.salutation || activeTeacher.name} Ji, just as Lord Krishna&apos;s wisdom illuminated Arjuna&apos;s path, your guidance has shaped my journey. Wishing you a very Happy Janmashtami. With deep gratitude, {senderName || "[Student Name]"}.&rdquo;
+                                  </p>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const tName = activeTeacher.salutation || activeTeacher.name;
+                                    setThankYouMessage(`Namaste ${tName} Ji, on this auspicious day of Janmashtami, I want to thank you for being a true mentor and guiding light in my academic life. Happy Janmashtami!`);
+                                  }}
+                                  className="text-left p-3 rounded-lg border border-amber-200/90 bg-[#fffdf8] hover:bg-amber-50/80 hover:border-amber-400/80 transition-all text-xs text-amber-955 space-y-1 cursor-pointer group shadow-3xs"
+                                >
+                                  <div className="font-bold text-[11px] text-amber-800 group-hover:text-amber-950 flex items-center gap-1.5">
+                                    <Award size={11} className="text-amber-700" />
+                                    Template 2: Guiding Light & Mentor
+                                  </div>
+                                  <p className="text-[11px] text-amber-900/75 italic line-clamp-3 leading-relaxed">
+                                    &ldquo;Namaste {activeTeacher.salutation || activeTeacher.name} Ji, on this auspicious day of Janmashtami, I want to thank you for being a true mentor and guiding light in my academic life. Happy Janmashtami!&rdquo;
+                                  </p>
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* FORM */}
+                            <form onSubmit={handleSendThankYou} className="space-y-3.5">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-[10px] font-bold uppercase text-amber-800 mb-1">Your Name *</label>
+                                  <input
+                                    type="text"
+                                    required
+                                    value={senderName}
+                                    onChange={(e) => setSenderName(e.target.value)}
+                                    placeholder="e.g. Ayush Sharma"
+                                    className="w-full px-3 py-2 text-xs border border-amber-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 rounded-lg text-amber-955 bg-white"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-bold uppercase text-amber-800 mb-1">Your Email (for replies) *</label>
+                                  <input
+                                    type="email"
+                                    required
+                                    value={senderEmail}
+                                    onChange={(e) => setSenderEmail(e.target.value)}
+                                    placeholder="student@example.com"
+                                    className="w-full px-3 py-2 text-xs border border-amber-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 rounded-lg text-amber-955 bg-white"
+                                  />
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="block text-[10px] font-bold uppercase text-amber-800 mb-1">
+                                  Your Gratitude Message *
+                                </label>
+                                <textarea
+                                  required
+                                  rows={4}
+                                  value={thankYouMessage}
+                                  onChange={(e) => setThankYouMessage(e.target.value)}
+                                  placeholder="Write your note or select a Shubh Sandesh template above..."
+                                  className="w-full px-3 py-2.5 text-xs border border-amber-200 focus:outline-hidden focus:ring-2 focus:ring-amber-400 rounded-lg text-amber-955 bg-white leading-relaxed"
+                                />
+                              </div>
+
+                              <div className="flex items-center justify-between gap-3 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setIsThankYouFormOpen(false)}
+                                  className="text-xs text-amber-800/60 hover:text-amber-900 underline cursor-pointer"
+                                >
+                                  Close Form
+                                </button>
+
+                                <button
+                                  type="submit"
+                                  disabled={isSendingNote}
+                                  className="px-5 py-2.5 bg-gradient-to-r from-amber-700 to-amber-900 hover:from-amber-800 hover:to-amber-955 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                                >
+                                  {isSendingNote ? (
+                                    <>
+                                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                      <span>Sending Note...</span>
+                                    </>
+                                  ) : noteSentStatus ? (
+                                    <>
+                                      <CheckCircle2 size={14} className="text-emerald-300" />
+                                      <span>Note Delivered!</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Send size={13} />
+                                      <span>Send Note to {activeTeacher.name}</span>
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            </form>
+                          </motion.div>
+                        )}
+                      </div>
+                    </div>
                   </>
                 )}
 
@@ -4091,6 +4603,7 @@ using this Edit Key from the Student Galleries panel.
                             <option value="emerald">Emerald Forest (Calm)</option>
                             <option value="royal">Royal Velvet (Premium)</option>
                             <option value="mystic">Mystic Charcoal (Dark)</option>
+                            <option value="vrindavan">Vrindavan (Limited-Edition Peacock & Gold)</option>
                           </select>
                         </div>
                         <div>

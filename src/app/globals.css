@@ -7,14 +7,17 @@
   --color-amber-50: #fefce8;
   --color-amber-100: #fef9c3;
   --color-amber-200: #fef08a;
+  --color-amber-250: #fde047;
   --color-amber-300: #fde047;
   --color-amber-400: #facc15;
   --color-amber-500: #f59e0b; /* Primary Accent */
   --color-amber-600: #d97706;
   --color-amber-700: #b45309;
   --color-amber-800: #92400e;
+  --color-amber-850: #652b0a;
   --color-amber-900: #78350f;
   --color-amber-950: #451a03;
+  --color-amber-955: #1c150c;
 }
 
 @theme {
