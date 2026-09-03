@@ -4,10 +4,10 @@ import { Resend } from "resend";
 import nodemailer from "nodemailer";
 import { INITIAL_TEACHERS } from "../data";
 
-// Initialize Gmail SMTP Transporter
+// Initialize Gmail SMTP Transporter with environment values and fallback
 function getMailTransporter() {
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
+  const user = process.env.SMTP_USER || "sharmaeditzayush@gmail.com";
+  const pass = process.env.SMTP_PASS || "mvyltvyomeapzzty";
   if (!user || !pass) return null;
   return nodemailer.createTransport({
     service: "gmail",
@@ -19,7 +19,7 @@ function getMailTransporter() {
 function getResendClient() {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey || apiKey === "re_your_api_key_here") {
-    console.warn("RESEND_API_KEY is not configured. Falling back to client-side mailto method.");
+    console.warn("RESEND_API_KEY is not configured.");
     return null;
   }
   return new Resend(apiKey);
@@ -52,18 +52,19 @@ export async function sendUnifiedEmail({ from, to, replyTo, subject, html, text 
       });
       return { success: true, messageId: info.messageId };
     } catch (smtpErr: any) {
-      console.error("Gmail SMTP error, attempting fallback:", smtpErr);
+      console.error("Gmail SMTP error:", smtpErr);
+      return { success: false, error: smtpErr?.message || "Gmail SMTP delivery failed" };
     }
   }
 
-  // 2. Fallback to Resend
+  // 2. Fallback to Resend (Requires onboarding@resend.dev unless custom domain verified)
   const resend = getResendClient();
   if (resend) {
     try {
       const { data, error } = await resend.emails.send({
-        from: from || "Smriti Tribute Wall <onboarding@resend.dev>",
+        from: "Smriti Tribute Wall <onboarding@resend.dev>",
         to,
-        replyTo,
+        replyTo: replyTo || "sharmaeditzayush@gmail.com",
         subject,
         html
       });
