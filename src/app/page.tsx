@@ -229,6 +229,13 @@ export default function Home() {
   const [passwordInput, setPasswordInput] = useState("");
   const [passwordError, setPasswordError] = useState(false);
 
+  // 6 Teachers Tribute Passcode Lock State (Passcode: 67672006)
+  const [isTributeUnlocked, setIsTributeUnlocked] = useState(false);
+  const [isLockModalOpen, setIsLockModalOpen] = useState(false);
+  const [lockTeacher, setLockTeacher] = useState<Teacher | null>(null);
+  const [lockPasscodeInput, setLockPasscodeInput] = useState("");
+  const [lockPasscodeError, setLockPasscodeError] = useState(false);
+
   // Custom tribute form state
   const [customTeacherName, setCustomTeacherName] = useState("");
   const [customDesignation, setCustomDesignation] = useState("");
@@ -350,6 +357,16 @@ export default function Home() {
 
     const timer = setInterval(checkBackgroundSchedule, 5000);
     return () => clearInterval(timer);
+  }, []);
+
+  // Check tribute unlock state in sessionStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const unlocked = sessionStorage.getItem("smriti_tribute_unlocked_67672006");
+      if (unlocked === "true") {
+        setIsTributeUnlocked(true);
+      }
+    }
   }, []);
 
   // Parse URL query parameter on load
@@ -1170,6 +1187,43 @@ using this Edit Key from the Student Galleries panel.
       setPasswordError(false);
     } else {
       setPasswordError(true);
+    }
+  };
+
+  // Card click interceptor for 6 protected teachers (Passcode: 67672006)
+  const handleTeacherCardClick = (teacher: Teacher) => {
+    const isProtected = ["1", "2", "3", "4", "5", "6"].includes(teacher.id);
+    if (isProtected && !isTributeUnlocked) {
+      setLockTeacher(teacher);
+      setLockPasscodeInput("");
+      setLockPasscodeError(false);
+      setIsLockModalOpen(true);
+      return;
+    }
+    setActiveTeacher(teacher);
+    setIsThankYouFormOpen(false);
+  };
+
+  // Verify secret passcode for 6 teachers (Passcode: 67672006)
+  const handleVerifyTributePasscode = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (lockPasscodeInput.trim() === "67672006") {
+      setIsTributeUnlocked(true);
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("smriti_tribute_unlocked_67672006", "true");
+      }
+      setIsLockModalOpen(false);
+      if (lockTeacher) {
+        setActiveTeacher(lockTeacher);
+        setLockTeacher(null);
+      }
+      setLockPasscodeInput("");
+      setLockPasscodeError(false);
+      setToastMessage("Tribute unlocked successfully! Welcome, Ayush. 🌸");
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 3000);
+    } else {
+      setLockPasscodeError(true);
     }
   };
 
@@ -1999,8 +2053,7 @@ using this Edit Key from the Student Galleries panel.
                 viewport={{ once: true }}
                 whileHover={{ y: -5, boxShadow: "0 10px 25px -8px rgba(180,83,9,0.12)" }}
                 onClick={() => {
-                  setActiveTeacher(teacher);
-                  setIsThankYouFormOpen(false);
+                  handleTeacherCardClick(teacher);
                 }}
                 className={`${cardClass} p-6 rounded-xl cursor-pointer transition-all duration-300 flex flex-col justify-between diary-page-curl group shadow-2xs`}
               >
@@ -3195,8 +3248,7 @@ using this Edit Key from the Student Galleries panel.
                   transition={{ duration: 0.4, delay: index * 0.04 }}
                   whileHover={{ y: -5, boxShadow: "0 10px 25px -8px rgba(180,83,9,0.12)" }}
                   onClick={() => {
-                    setActiveTeacher(teacher);
-                    setIsThankYouFormOpen(false);
+                    handleTeacherCardClick(teacher);
                   }}
                   className="bg-white border border-amber-100 hover:border-amber-250 p-6 rounded-xl cursor-pointer transition-all duration-300 flex flex-col justify-between diary-page-curl group shadow-2xs"
                 >
@@ -3219,9 +3271,17 @@ using this Edit Key from the Student Galleries panel.
                       </div>
                       
                       <div>
-                        <h3 className="font-serif text-base font-bold text-amber-955 group-hover:text-amber-700 transition-colors">
-                          {teacher.name}
-                        </h3>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-serif text-base font-bold text-amber-955 group-hover:text-amber-700 transition-colors">
+                            {teacher.name}
+                          </h3>
+                          {!isTributeUnlocked && ["1", "2", "3", "4", "5", "6"].includes(teacher.id) && (
+                            <span className="inline-flex items-center gap-1 text-[9px] font-sans font-bold text-amber-800 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded-full" title="Protected with passcode">
+                              <Lock size={9} className="text-amber-700" />
+                              <span>Private</span>
+                            </span>
+                          )}
+                        </div>
                         <span className="inline-block px-2 py-0.5 mt-0.5 text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200/50 rounded-full uppercase tracking-wider">
                           {teacher.subject}
                         </span>
@@ -3251,8 +3311,15 @@ using this Edit Key from the Student Galleries panel.
                           {copiedId === teacher.id ? <CheckCircle2 size={13} className="text-green-600" /> : <Share2 size={13} />}
                         </button>
                       )}
-                      <span className="font-semibold text-amber-600 hover:text-amber-800 transition-colors">
-                        Read Detailed Story &rarr;
+                      <span className="font-semibold text-amber-600 hover:text-amber-800 transition-colors flex items-center gap-1">
+                        {!isTributeUnlocked && ["1", "2", "3", "4", "5", "6"].includes(teacher.id) ? (
+                          <>
+                            <Lock size={11} className="text-amber-700" />
+                            <span>Unlock Story &rarr;</span>
+                          </>
+                        ) : (
+                          <span>Read Detailed Story &rarr;</span>
+                        )}
                       </span>
                     </div>
                   </div>
@@ -4306,6 +4373,99 @@ using this Edit Key from the Student Galleries panel.
                     className="w-full py-2.5 bg-amber-800 hover:bg-amber-900 text-white font-bold text-xs uppercase tracking-wider rounded-lg transition-colors shadow-xs"
                   >
                     Verify & Copy
+                  </button>
+                </form>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 6 TEACHERS TRIBUTE PASSCODE LOCK MODAL (Passcode: 67672006) */}
+      <AnimatePresence>
+        {isLockModalOpen && lockTeacher && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => {
+                setIsLockModalOpen(false);
+                setLockTeacher(null);
+              }}
+              className="fixed inset-0 bg-amber-955/40 backdrop-blur-xs cursor-pointer"
+            />
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ type: "spring", duration: 0.4 }}
+              className="relative w-full max-w-sm bg-[#fffefb] border-2 border-amber-300 rounded-2xl shadow-2xl p-6 z-10 flex flex-col diary-page overflow-hidden"
+            >
+              {/* Corner Filigree */}
+              <div className="absolute top-2 left-2 border-t-2 border-l-2 border-amber-400 w-4 h-4 pointer-events-none" />
+              <div className="absolute top-2 right-2 border-t-2 border-r-2 border-amber-400 w-4 h-4 pointer-events-none" />
+              <div className="absolute bottom-2 left-2 border-b-2 border-l-2 border-amber-400 w-4 h-4 pointer-events-none" />
+              <div className="absolute bottom-2 right-2 border-b-2 border-r-2 border-amber-400 w-4 h-4 pointer-events-none" />
+
+              <button
+                onClick={() => {
+                  setIsLockModalOpen(false);
+                  setLockTeacher(null);
+                }}
+                className="absolute top-3.5 right-3.5 text-amber-800/60 hover:text-amber-955 transition-colors p-1 rounded-full cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+
+              <div className="text-center space-y-3.5 pt-1">
+                <div className="w-14 h-14 rounded-full bg-gradient-to-b from-amber-500 to-amber-700 border-2 border-amber-300 flex items-center justify-center mx-auto text-amber-50 shadow-md">
+                  <Lock size={22} className="stroke-[1.75]" />
+                </div>
+
+                <div className="space-y-1">
+                  <span className="text-[10px] font-sans font-bold uppercase tracking-widest text-amber-700 block">
+                    Protected Tribute &amp; Wishings
+                  </span>
+                  <h3 className="font-serif text-xl font-bold text-amber-955">
+                    {lockTeacher.salutation || lockTeacher.name}
+                  </h3>
+                  <p className="text-xs text-amber-900/80 leading-relaxed font-serif italic px-2">
+                    &ldquo;Yeh sacred tribute diary Ayush Sharma ke dwara locked hai. Kripya unlock karne ke liye passcode enter karein.&rdquo;
+                  </p>
+                </div>
+
+                <form onSubmit={handleVerifyTributePasscode} className="space-y-3 pt-1 text-left">
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-amber-850">
+                      Secret Access Code
+                    </label>
+                    <input
+                      type="password"
+                      autoFocus
+                      required
+                      value={lockPasscodeInput}
+                      onChange={(e) => {
+                        setLockPasscodeInput(e.target.value);
+                        if (lockPasscodeError) setLockPasscodeError(false);
+                      }}
+                      placeholder="Enter code..."
+                      className="w-full px-3.5 py-2.5 text-center text-sm tracking-widest font-mono border border-amber-300 rounded-xl bg-amber-50/40 text-amber-955 focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs"
+                    />
+                    {lockPasscodeError && (
+                      <p className="text-[11px] text-red-600 font-semibold text-center pt-0.5 animate-in fade-in">
+                        Galat passcode hai! Sirf Ayush Sharma ise open kar sakte hain.
+                      </p>
+                    )}
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-2.5 bg-gradient-to-r from-amber-700 via-amber-600 to-amber-700 hover:from-amber-800 hover:to-amber-800 text-white font-bold text-xs uppercase tracking-widest rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <span>Unlock Tribute</span>
+                    <ArrowRight size={13} />
                   </button>
                 </form>
               </div>
