@@ -1204,10 +1204,26 @@ using this Edit Key from the Student Galleries panel.
     setIsThankYouFormOpen(false);
   };
 
-  // Verify secret passcode for 6 teachers (Passcode: 67672006)
-  const handleVerifyTributePasscode = (e: React.FormEvent) => {
+  // Verify secret passcode for 6 teachers (Dynamic with 67672006 fallback)
+  const handleVerifyTributePasscode = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (lockPasscodeInput.trim() === "67672006") {
+    const cleanCode = lockPasscodeInput.trim();
+    if (!cleanCode) return;
+
+    let isSuccess = false;
+    try {
+      const res = await fetch("/api/tribute-passcode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: cleanCode })
+      });
+      const data = await res.json();
+      isSuccess = Boolean(data.success);
+    } catch {
+      isSuccess = cleanCode === "67672006";
+    }
+
+    if (isSuccess) {
       setIsTributeUnlocked(true);
       if (typeof window !== "undefined") {
         sessionStorage.setItem("smriti_tribute_unlocked_67672006", "true");

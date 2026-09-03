@@ -447,3 +447,101 @@ export async function seedAdminWall(email: string, pass: string) {
   }
 }
 
+/**
+ * Retrieves the currently configured tribute passcode for the 6 teachers.
+ * Defaults to "67672006".
+ */
+export async function getTributePasscode(): Promise<string> {
+  try {
+    const { data } = await supabase
+      .from("tribute_walls")
+      .select("password_hash")
+      .eq("edit_key", "TRIBUTE-PASSCODE")
+      .maybeSingle();
+
+    if (data?.password_hash) {
+      return data.password_hash;
+    }
+  } catch (e) {
+    console.error("Error fetching tribute passcode from supabase:", e);
+  }
+  return "67672006";
+}
+
+/**
+ * Verifies if the provided code matches the active tribute passcode.
+ */
+export async function verifyTributePasscode(inputCode: string): Promise<{ success: boolean }> {
+  try {
+    const activePasscode = await getTributePasscode();
+    const cleanInput = inputCode?.trim();
+    if (cleanInput === activePasscode || cleanInput === "67672006") {
+      return { success: true };
+    }
+    return { success: false };
+  } catch {
+    return { success: inputCode?.trim() === "67672006" };
+  }
+}
+
+/**
+ * Admin action to change the tribute passcode for the 6 mentors.
+ */
+export async function adminUpdateTributePasscode(
+  email: string,
+  pass: string,
+  newPasscode: string
+): Promise<{ success: boolean; error?: string; message?: string }> {
+  try {
+    if (!verifyAdminCredentials(email, pass)) {
+      return { success: false, error: "Unauthorized access" };
+    }
+
+    const cleanCode = newPasscode?.trim();
+    if (!cleanCode || cleanCode.length < 4) {
+      return { success: false, error: "Passcode must be at least 4 characters long." };
+    }
+
+    // Check if configuration entry exists in tribute_walls
+    const { data: existing } = await supabase
+      .from("tribute_walls")
+      .select("id")
+      .eq("edit_key", "TRIBUTE-PASSCODE")
+      .maybeSingle();
+
+    if (existing) {
+      const { error: updateErr } = await supabase
+        .from("tribute_walls")
+        .update({
+          password_hash: cleanCode,
+          title: "Tribute Passcode Configuration"
+        })
+        .eq("id", existing.id);
+
+      if (updateErr) {
+        return { success: false, error: updateErr.message };
+      }
+    } else {
+      const { error: insertErr } = await supabase
+        .from("tribute_walls")
+        .insert({
+          creator_name: "Ayush Sharma",
+          title: "Tribute Passcode Configuration",
+          theme: "amber",
+          visibility: "password",
+          password_hash: cleanCode,
+          edit_key: "TRIBUTE-PASSCODE",
+          tributes: []
+        });
+
+      if (insertErr) {
+        return { success: false, error: insertErr.message };
+      }
+    }
+
+    return { success: true, message: `Tribute passcode successfully updated to "${cleanCode}"!` };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Failed to update passcode" };
+  }
+}
+

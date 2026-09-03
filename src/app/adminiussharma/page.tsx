@@ -79,6 +79,12 @@ export default function AdminPage() {
     "On this auspicious festival of Shri Krishna Janmashtami, I reflect with profound gratitude on the eternal Guru-Shishya Parampara. Just as Shri Krishna illuminated Arjuna's path in the midst of uncertainty, your guidance, patience, and mentorship have shaped my academic journey. Wishing you and your family abundant peace, joy, and blessings on Janmashtami."
   );
 
+  // Tribute Passcode Manager states
+  const [currentTributePasscode, setCurrentTributePasscode] = useState("67672006");
+  const [newTributePasscode, setNewTributePasscode] = useState("");
+  const [isUpdatingPasscode, setIsUpdatingPasscode] = useState(false);
+  const [showPasscodePlaintext, setShowPasscodePlaintext] = useState(false);
+
   // Load scheduler config from localStorage
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -174,6 +180,60 @@ export default function AdminPage() {
     } finally {
       setIsInstantSending(false);
       setIsAutoSending(false);
+    }
+  };
+
+  // Fetch current tribute passcode from server
+  const fetchCurrentTributePasscode = async () => {
+    try {
+      const res = await fetch("/api/tribute-passcode");
+      const data = await res.json();
+      if (data?.passcode) {
+        setCurrentTributePasscode(data.passcode);
+      }
+    } catch (e) {
+      console.error("Failed to fetch tribute passcode:", e);
+    }
+  };
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchCurrentTributePasscode();
+    }
+  }, [isAuthenticated]);
+
+  // Update tribute passcode handler
+  const handleUpdateTributePasscode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanCode = newTributePasscode.trim();
+    if (!cleanCode || cleanCode.length < 4) {
+      triggerToast("Passcode must be at least 4 characters long.");
+      return;
+    }
+
+    setIsUpdatingPasscode(true);
+    try {
+      const res = await fetch("/api/tribute-passcode", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: adminEmail,
+          pass: adminPass,
+          newPasscode: cleanCode
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setCurrentTributePasscode(cleanCode);
+        setNewTributePasscode("");
+        triggerToast(`Passcode updated to "${cleanCode}"! 🔐`);
+      } else {
+        triggerToast(data.error || "Failed to update passcode.");
+      }
+    } catch (err: any) {
+      triggerToast(err?.message || "Error updating passcode.");
+    } finally {
+      setIsUpdatingPasscode(false);
     }
   };
 
@@ -593,6 +653,64 @@ export default function AdminPage() {
                   )}
                 </div>
               </div>
+            </div>
+
+            {/* TRIBUTE PASSCODE MANAGER CARD */}
+            <div className="bg-white border-2 border-amber-300 rounded-2xl p-6 sm:p-7 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-amber-100 pb-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-800">
+                      <Lock size={16} />
+                    </div>
+                    <h3 className="font-serif text-lg font-bold text-amber-955">
+                      6 Mentors Tribute Passcode Manager
+                    </h3>
+                  </div>
+                  <p className="text-xs text-neutral-600">
+                    Control the secret code required to open the 6 teachers&apos; wishings and tributes on the homepage.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 self-start sm:self-auto bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-xl">
+                  <span className="text-[11px] font-bold text-amber-900">Current Code:</span>
+                  <span className="font-mono text-xs font-black text-amber-955 tracking-wider">
+                    {showPasscodePlaintext ? currentTributePasscode : "••••••••"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowPasscodePlaintext(!showPasscodePlaintext)}
+                    className="p-1 text-amber-700 hover:text-amber-950 transition-colors cursor-pointer"
+                    title={showPasscodePlaintext ? "Hide Code" : "Show Code"}
+                  >
+                    <Eye size={13} />
+                  </button>
+                </div>
+              </div>
+
+              <form onSubmit={handleUpdateTributePasscode} className="flex flex-col sm:flex-row items-end gap-3 pt-1">
+                <div className="flex-1 w-full space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-amber-900 block">
+                    Set New Passcode
+                  </label>
+                  <input
+                    type="text"
+                    value={newTributePasscode}
+                    onChange={(e) => setNewTributePasscode(e.target.value)}
+                    placeholder="Enter new custom passcode (e.g. 67672006)..."
+                    className="w-full px-3.5 py-2 text-xs border border-amber-300 rounded-lg text-amber-955 bg-white font-mono focus:outline-hidden focus:ring-2 focus:ring-amber-400"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isUpdatingPasscode || !newTributePasscode.trim()}
+                  className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-amber-700 via-amber-600 to-amber-700 hover:from-amber-800 hover:to-amber-800 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+                >
+                  <Lock size={12} />
+                  <span>{isUpdatingPasscode ? "Saving..." : "Update Passcode"}</span>
+                </button>
+              </form>
             </div>
 
             {/* CONFIGURATION GRID */}
