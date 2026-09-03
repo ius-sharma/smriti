@@ -1095,7 +1095,6 @@ export default function AdminPage() {
                         </p>
                         {mailerTarget === "all_teachers" && (
                           <div className="inline-flex items-center gap-1 text-[10px] text-amber-900 bg-amber-100/90 border border-amber-300/70 px-2 py-0.5 rounded-full font-sans font-medium">
-                            <span>✨ Note: Har teacher ko unka apna real naam jayega (e.g. Paras Shingadiya, Reshma Sunil, Dr. Dhara Joshi...)</span>
                           </div>
                         )}
                       </div>
