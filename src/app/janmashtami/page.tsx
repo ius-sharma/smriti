@@ -71,7 +71,7 @@ const PRESET_BLESSINGS = [
 
 function JanmashtamiTributeContent() {
   const searchParams = useSearchParams();
-  const teacherId = searchParams.get("id") || searchParams.get("teacher") || "7";
+  const teacherId = searchParams.get("id") || searchParams.get("teacher") || "1";
 
   const [teacher, setTeacher] = useState<Teacher | null>(null);
   const [isEnvelopeOpened, setIsEnvelopeOpened] = useState(false);
@@ -82,7 +82,7 @@ function JanmashtamiTributeContent() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    const found = INITIAL_TEACHERS.find(t => t.id === teacherId) || INITIAL_TEACHERS.find(t => t.id === "7") || INITIAL_TEACHERS[0];
+    const found = INITIAL_TEACHERS.find(t => t.id === teacherId) || INITIAL_TEACHERS[0];
     setTeacher(found);
   }, [teacherId]);
 

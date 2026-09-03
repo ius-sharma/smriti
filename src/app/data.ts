@@ -160,28 +160,5 @@ export const INITIAL_TEACHERS: Teacher[] = [
     initials: "KT",
     avatarColor: "from-amber-200 to-amber-300 text-amber-955 border-amber-450",
     bgPattern: "bg-[radial-gradient(#b45309_0.8px,transparent_0.8px)] [background-size:14px_14px]"
-  },
-  {
-    id: "7",
-    name: "Dr. Arvind Radhakrishnan",
-    salutation: "Arvind Sir",
-    subject: "Distributed Systems & Cloud Architecture",
-    designation: "Associate Professor & Research Chair",
-    college: "Marwadi University",
-    years: "2024 – Present",
-    photo: "",
-    bestAdvice: "A distributed system fails when nodes lose trust; in life as well, trust and communication are your strongest protocols.",
-    favoriteMemory: "Late-night architecture lab review where sir stayed back with us to debug a distributed consensus failure and treated the whole team to chai.",
-    teachingStyle: "First-principles thinking, live whiteboard system architectural design, and deep hands-on debugging.",
-    personality: "Calm, intellectual, deeply insightful, and always approachable.",
-    lifeLesson: "Complex chaos can be engineered into resilient harmony through calm patience.",
-    howTheyShaped: "Taught me how to look at large complex software systems without fear, breaking problems into modular, graceful components.",
-    skillsLearned: "Microservices architecture, consensus algorithms, and fault tolerance.",
-    favoriteSaying: "Trust the protocol, verify the logs, stay grounded.",
-    gitaLesson: "Yogasthah Kuru Karmani — Perform your actions with steadfast equanimity, undisturbed by success or failure.",
-    contactEmail: "arvind.radhakrishnan@marwadieducation.edu.in",
-    initials: "AR",
-    avatarColor: "from-blue-900 to-indigo-950 text-amber-100 border-yellow-500/40",
-    bgPattern: "bg-[radial-gradient(#d4af37_0.8px,transparent_0.8px)] [background-size:14px_14px]"
   }
 ];

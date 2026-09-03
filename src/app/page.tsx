@@ -1112,7 +1112,7 @@ using this Edit Key from the Student Galleries panel.
     if (e) e.stopPropagation(); // prevent grid card triggers
     
     if (typeof window !== "undefined") {
-      const isPredefined = ["1", "2", "3", "4", "5", "6", "7"].includes(teacher.id);
+      const isPredefined = ["1", "2", "3", "4", "5", "6"].includes(teacher.id);
       if (isPredefined) {
         setToastMessage("Sharing links for Guiding Lights is disabled.");
         setShowToast(true);
@@ -1133,8 +1133,7 @@ using this Edit Key from the Student Galleries panel.
       "3": "niraj",
       "4": "charmy",
       "5": "dhara",
-      "6": "kajal",
-      "7": "arvind"
+      "6": "kajal"
     };
     const slug = slugMap[teacher.id] || teacher.name.split(" ")[0].toLowerCase();
     const link = `${window.location.origin}?teacher=${slug}`;
@@ -3243,7 +3242,7 @@ using this Edit Key from the Student Galleries panel.
                       {teacher.years}
                     </span>
                     <div className="flex items-center gap-2">
-                      {!["1", "2", "3", "4", "5", "6", "7"].includes(teacher.id) && (
+                      {!["1", "2", "3", "4", "5", "6"].includes(teacher.id) && (
                         <button
                           onClick={(e) => handleCopyLink(teacher, e)}
                           title="Copy shareable link"
@@ -3375,7 +3374,7 @@ using this Edit Key from the Student Galleries panel.
                   Back
                 </button>
 
-                {!["1", "2", "3", "4", "5", "6", "7"].includes(activeTeacher.id) && (
+                {!["1", "2", "3", "4", "5", "6"].includes(activeTeacher.id) && (
                   <button
                     onClick={() => handleCopyLink(activeTeacher)}
                     className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-amber-750 hover:text-amber-900 border border-amber-200 bg-white rounded-md transition-all shadow-3xs"

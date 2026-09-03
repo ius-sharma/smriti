@@ -520,8 +520,8 @@ export async function dispatchJanmashtamiBatch({
     // Determine target teachers
     let teachersToSend = INITIAL_TEACHERS;
     if (target === "test_only") {
-      // Find specified teacher (or Dr. Arvind by default)
-      const targetId = testTeacherId || "7";
+      // Find specified teacher (or first teacher by default)
+      const targetId = testTeacherId || "1";
       const testTeacher = INITIAL_TEACHERS.find(t => t.id === targetId) || INITIAL_TEACHERS[0];
       teachersToSend = [testTeacher];
     }

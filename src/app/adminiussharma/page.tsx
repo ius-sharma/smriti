@@ -547,7 +547,7 @@ export default function AdminPage() {
                     Janmashtami Mentor Tribute Scheduler
                   </h2>
                   <p className="text-sm text-neutral-800 leading-relaxed font-sans font-medium">
-                    Schedule automated gratitude emails to your mentors for 6:00 PM today without missing, or test instant delivery with Dr. Arvind Radhakrishnan.
+                    Schedule automated gratitude emails to your mentors for 6:00 PM today without missing, or test instant delivery with individual faculty mentors.
                   </p>
                 </div>
 
@@ -602,7 +602,7 @@ export default function AdminPage() {
                 <div className="border-b border-amber-100 pb-3">
                   <h3 className="font-serif text-lg font-bold text-amber-955 flex items-center gap-2">
                     <Clock size={16} className="text-amber-700" />
-                    Target Mentors & Timing
+                    Target Mentors &amp; Timing
                   </h3>
                   <p className="text-xs text-amber-800/60 mt-0.5">
                     Select who receives the emails and set the exact delivery schedule.
@@ -625,7 +625,7 @@ export default function AdminPage() {
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="font-bold text-xs">Test Teacher Only</span>
+                        <span className="font-bold text-xs">Single Mentor</span>
                         <input
                           type="radio"
                           name="mailerTarget"
@@ -635,7 +635,7 @@ export default function AdminPage() {
                         />
                       </div>
                       <span className="text-[11px] text-blue-900/70">
-                        Dr. Arvind Radhakrishnan (Sample Mentor)
+                        Selected from dropdown below
                       </span>
                     </label>
 
@@ -658,7 +658,7 @@ export default function AdminPage() {
                         />
                       </div>
                       <span className="text-[11px] text-amber-900/70">
-                        All 7 Faculty Profiles in Smriti
+                        All 6 Faculty Profiles in Smriti
                       </span>
                     </label>
                   </div>
@@ -767,21 +767,6 @@ export default function AdminPage() {
                           }`}
                         >
                           kajalben.tanchak@marwadieducation.edu.in
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedTeacherId("7");
-                            setTestEmailOverride("arvind.radhakrishnan@marwadieducation.edu.in");
-                            triggerToast("Target set to Dr. Arvind's college email");
-                          }}
-                          className={`text-[10px] px-2 py-0.5 rounded-md border font-mono transition-colors cursor-pointer ${
-                            testEmailOverride === "arvind.radhakrishnan@marwadieducation.edu.in"
-                              ? "bg-blue-600 text-white border-blue-700"
-                              : "bg-blue-100/60 text-blue-900 border-blue-200 hover:bg-blue-200/60"
-                          }`}
-                        >
-                          arvind.radhakrishnan@marwadieducation.edu.in
                         </button>
                       </div>
 
