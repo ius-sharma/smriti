@@ -477,6 +477,7 @@ export async function sendJanmashtamiNudgeEmail({
 
 export interface JanmashtamiBatchParams {
   target: "test_only" | "all_teachers";
+  testTeacherId?: string;
   testEmailOverride?: string;
   senderName?: string;
   senderEmail?: string;
@@ -499,6 +500,7 @@ export interface DispatchResultItem {
  */
 export async function dispatchJanmashtamiBatch({
   target = "test_only",
+  testTeacherId,
   testEmailOverride,
   senderName = "Ayush Sharma",
   senderEmail = "sharmaeditzayush@gmail.com",
@@ -517,8 +519,9 @@ export async function dispatchJanmashtamiBatch({
     // Determine target teachers
     let teachersToSend = INITIAL_TEACHERS;
     if (target === "test_only") {
-      // Find Dr. Arvind Radhakrishnan (id: "7") or first teacher
-      const testTeacher = INITIAL_TEACHERS.find(t => t.id === "7") || INITIAL_TEACHERS[0];
+      // Find specified teacher (or Dr. Arvind by default)
+      const targetId = testTeacherId || "7";
+      const testTeacher = INITIAL_TEACHERS.find(t => t.id === targetId) || INITIAL_TEACHERS[0];
       teachersToSend = [testTeacher];
     }
 
@@ -547,18 +550,15 @@ export async function dispatchJanmashtamiBatch({
             
             <!-- Krishna Peacock & Gold Header Bar -->
             <div style="background: linear-gradient(135deg, #091322 0%, #1e3a5f 100%); padding: 22px 20px; text-align: center; border-bottom: 2px solid #d4af37;">
-              <div style="font-size: 13px; font-weight: 700; letter-spacing: 0.15em; color: #fde047; text-transform: uppercase;">
+              <div style="font-size: 14px; font-weight: 700; letter-spacing: 0.12em; color: #fde047; text-transform: uppercase;">
                 Shri Krishna Janmashtami • 2026
-              </div>
-              <div style="font-family: Georgia, serif; font-size: 13px; color: #e2e8f0; letter-spacing: 0.05em; font-style: italic; margin-top: 5px;">
-                The Sacred Guru-Shishya Parampara
               </div>
             </div>
 
             <!-- Letter Body -->
             <div style="padding: 26px 24px 22px 24px;">
               <h2 style="margin: 0 0 16px 0; font-family: Georgia, serif; font-size: 20px; color: #1c150c; font-weight: 600;">
-                Respected ${tName} Ji,
+                Respected ${tName},
               </h2>
 
               <p style="margin: 0 0 14px 0; font-size: 14px; line-height: 1.65; color: #3d352a;">
@@ -607,9 +607,9 @@ export async function dispatchJanmashtamiBatch({
       `;
 
       const textContent = `
-Shri Krishna Janmashtami • 2026 | The Sacred Guru-Shishya Parampara
+Shri Krishna Janmashtami • 2026
 
-Respected ${tName} Ji,
+Respected ${tName},
 
 ${personalizedMessage}
 
@@ -626,7 +626,7 @@ ${effectiveBaseUrl}/janmashtami?id=${teacher.id}
         const mailResult = await sendUnifiedEmail({
           from: `"Ayush Sharma" <${process.env.SMTP_USER || "sharmaeditzayush@gmail.com"}>`,
           to: recipientEmail,
-          subject: `Shubh Janmashtami, ${tName} Ji — Guru-Shishya Gratitude`,
+          subject: `Shubh Janmashtami, ${tName} — Guru-Shishya Gratitude`,
           replyTo: senderEmail,
           text: textContent,
           html: htmlContent

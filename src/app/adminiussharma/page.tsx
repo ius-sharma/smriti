@@ -66,6 +66,7 @@ export default function AdminPage() {
   // Auto-Mailer states
   const [activeAdminTab, setActiveAdminTab] = useState<"mailer" | "registry">("mailer");
   const [mailerTarget, setMailerTarget] = useState<"test_only" | "all_teachers">("test_only");
+  const [selectedTeacherId, setSelectedTeacherId] = useState("5"); // default to Dr. Dhara Joshi
   const [testEmailOverride, setTestEmailOverride] = useState("sharmaeditzayush@gmail.com");
   const [scheduledDate, setScheduledDate] = useState("2026-09-04");
   const [scheduledTime, setScheduledTime] = useState("18:00");
@@ -125,6 +126,7 @@ export default function AdminPage() {
       const currentOrigin = typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
       const res = await dispatchJanmashtamiBatch({
         target: mailerTarget,
+        testTeacherId: selectedTeacherId,
         testEmailOverride: mailerTarget === "test_only" ? testEmailOverride : undefined,
         senderName: "Ayush Sharma",
         senderEmail: "sharmaeditzayush@gmail.com",
@@ -649,23 +651,51 @@ export default function AdminPage() {
 
                   {/* Test Email Override Input */}
                   {mailerTarget === "test_only" && (
-                    <div className="pt-2">
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-blue-950 block mb-1">
-                        Test Delivery Email (Your Personal Inbox)
-                      </label>
-                      <div className="relative">
-                        <Mail size={14} className="absolute left-3 top-3 text-blue-800/50" />
-                        <input
-                          type="email"
-                          value={testEmailOverride}
-                          onChange={(e) => setTestEmailOverride(e.target.value)}
-                          placeholder="sharmaeditzayush@gmail.com"
-                          className="w-full pl-9 pr-3 py-2 text-xs border border-blue-200 bg-blue-50/30 rounded-lg text-blue-950 focus:outline-hidden focus:ring-2 focus:ring-blue-400"
-                        />
+                    <div className="pt-2 space-y-2.5">
+                      {/* Teacher Selector for Tribute Card */}
+                      <div>
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-amber-900 block mb-1">
+                          Select Mentor for Tribute &amp; Card:
+                        </label>
+                        <select
+                          value={selectedTeacherId}
+                          onChange={(e) => {
+                            const id = e.target.value;
+                            setSelectedTeacherId(id);
+                            const t = INITIAL_TEACHERS.find(x => x.id === id);
+                            if (t) {
+                              triggerToast(`Selected: ${t.salutation || t.name}`);
+                            }
+                          }}
+                          className="w-full px-3 py-2 text-xs border border-amber-300 bg-white rounded-lg text-amber-955 font-serif font-semibold focus:outline-hidden focus:ring-2 focus:ring-amber-400"
+                        >
+                          {INITIAL_TEACHERS.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.salutation || t.name} — {t.subject} ({t.designation})
+                            </option>
+                          ))}
+                        </select>
                       </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-blue-950 block mb-1">
+                          Test Delivery Email (Your Personal Inbox or Mentor Email)
+                        </label>
+                        <div className="relative">
+                          <Mail size={14} className="absolute left-3 top-3 text-blue-800/50" />
+                          <input
+                            type="email"
+                            value={testEmailOverride}
+                            onChange={(e) => setTestEmailOverride(e.target.value)}
+                            placeholder="sharmaeditzayush@gmail.com"
+                            className="w-full pl-9 pr-3 py-2 text-xs border border-blue-200 bg-blue-50/30 rounded-lg text-blue-950 focus:outline-hidden focus:ring-2 focus:ring-blue-400"
+                          />
+                        </div>
+                      </div>
+
                       {/* Quick recipient chips */}
-                      <div className="flex flex-wrap gap-1.5 mt-2">
-                        <span className="text-[10px] text-blue-900/70 font-semibold self-center">Quick Target:</span>
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        <span className="text-[10px] text-blue-900/70 font-semibold self-center">Quick Targets:</span>
                         <button
                           type="button"
                           onClick={() => {
@@ -697,6 +727,37 @@ export default function AdminPage() {
                         <button
                           type="button"
                           onClick={() => {
+                            setSelectedTeacherId("5");
+                            setTestEmailOverride("dhara.joshi@marwadieducation.edu.in");
+                            triggerToast("Target set to Dhara Mam's official email!");
+                          }}
+                          className={`text-[10px] px-2 py-0.5 rounded-md border font-mono transition-colors cursor-pointer ${
+                            testEmailOverride === "dhara.joshi@marwadieducation.edu.in"
+                              ? "bg-blue-600 text-white border-blue-700"
+                              : "bg-amber-100/80 text-amber-955 border-amber-300 hover:bg-amber-200/80"
+                          }`}
+                        >
+                          dhara.joshi@marwadieducation.edu.in
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedTeacherId("6");
+                            setTestEmailOverride("kajalben.tanchak@marwadieducation.edu.in");
+                            triggerToast("Target set to Kajal Mam's official email!");
+                          }}
+                          className={`text-[10px] px-2 py-0.5 rounded-md border font-mono transition-colors cursor-pointer ${
+                            testEmailOverride === "kajalben.tanchak@marwadieducation.edu.in"
+                              ? "bg-blue-600 text-white border-blue-700"
+                              : "bg-amber-100/80 text-amber-955 border-amber-300 hover:bg-amber-200/80"
+                          }`}
+                        >
+                          kajalben.tanchak@marwadieducation.edu.in
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedTeacherId("7");
                             setTestEmailOverride("arvind.radhakrishnan@marwadieducation.edu.in");
                             triggerToast("Target set to Dr. Arvind's college email");
                           }}
@@ -892,14 +953,11 @@ export default function AdminPage() {
                       <div className="text-[11px] uppercase font-bold tracking-wider text-yellow-300">
                         Shri Krishna Janmashtami • 2026
                       </div>
-                      <div className="text-[11px] text-slate-200 font-serif italic mt-0.5">
-                        The Sacred Guru-Shishya Parampara
-                      </div>
                     </div>
 
                     <div className="p-4 space-y-3 bg-[#faf9f5]">
                       <p className="font-serif text-sm font-semibold text-[#1c150c]">
-                        Respected {mailerTarget === "test_only" ? "Arvind Sir" : "[Teacher Name]"} Ji,
+                        Respected {mailerTarget === "test_only" ? (INITIAL_TEACHERS.find(t => t.id === selectedTeacherId)?.salutation || "Mentor") : "[Teacher Name]"},
                       </p>
 
                       <p className="text-neutral-700 leading-relaxed text-xs">
