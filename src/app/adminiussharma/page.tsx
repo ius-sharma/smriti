@@ -1018,7 +1018,7 @@ export default function AdminPage() {
                           <span>
                             {mailerTarget === "test_only" 
                               ? `Send Instant Test Mail (${testEmailOverride ? testEmailOverride.split("@")[0] : "Test"})` 
-                              : "Send Instant Mail to All 7 Mentors"}
+                              : "Send Instant Mail to All 6 Mentors"}
                           </span>
                         </>
                       )}
@@ -1039,12 +1039,12 @@ export default function AdminPage() {
                         type="button"
                         onClick={() => {
                           persistScheduleState(true);
-                          triggerToast(`Auto-scheduler armed for ${scheduledDate} at ${scheduledTime}!`);
+                          triggerToast(`Scheduler armed for ${scheduledDate} at ${scheduledTime} IST!`);
                         }}
-                        className="py-3 px-5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-colors shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+                        className="py-3 px-5 bg-[#091322] hover:bg-[#1e3a5f] text-yellow-400 border border-yellow-500/50 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors shadow-xs flex items-center justify-center gap-2 cursor-pointer"
                       >
-                        <Play size={13} />
-                        <span>Arm Auto-Schedule</span>
+                        <Play size={13} className="text-yellow-400 fill-yellow-400" />
+                        <span>Arm Scheduler</span>
                       </button>
                     )}
                   </div>
@@ -1089,9 +1089,16 @@ export default function AdminPage() {
                     </div>
 
                     <div className="p-4 space-y-3 bg-[#faf9f5]">
-                      <p className="font-serif text-sm font-semibold text-[#1c150c]">
-                        Respected {mailerTarget === "test_only" ? (INITIAL_TEACHERS.find(t => t.id === selectedTeacherId)?.salutation || "Mentor") : "[Teacher Name]"},
-                      </p>
+                      <div className="space-y-1">
+                        <p className="font-serif text-sm font-semibold text-[#1c150c]">
+                          Respected {INITIAL_TEACHERS.find(t => t.id === selectedTeacherId)?.salutation || "Paras Shingadiya"},
+                        </p>
+                        {mailerTarget === "all_teachers" && (
+                          <div className="inline-flex items-center gap-1 text-[10px] text-amber-900 bg-amber-100/90 border border-amber-300/70 px-2 py-0.5 rounded-full font-sans font-medium">
+                            <span>✨ Note: Har teacher ko unka apna real naam jayega (e.g. Paras Shingadiya, Reshma Sunil, Dr. Dhara Joshi...)</span>
+                          </div>
+                        )}
+                      </div>
 
                       <p className="text-neutral-700 leading-relaxed text-xs">
                         {customMailMessage}
