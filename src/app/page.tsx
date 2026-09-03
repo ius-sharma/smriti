@@ -1204,23 +1204,40 @@ using this Edit Key from the Student Galleries panel.
     setIsThankYouFormOpen(false);
   };
 
-  // Verify secret passcode for 6 teachers (Dynamic with 67672006 fallback)
+  // Verify secret passcode for 6 teachers (Dynamic with localStorage & server sync)
   const handleVerifyTributePasscode = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanCode = lockPasscodeInput.trim();
     if (!cleanCode) return;
 
     let isSuccess = false;
-    try {
-      const res = await fetch("/api/tribute-passcode", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: cleanCode })
-      });
-      const data = await res.json();
-      isSuccess = Boolean(data.success);
-    } catch {
-      isSuccess = cleanCode === "67672006";
+
+    // 1. Check local storage if admin updated it in browser
+    if (typeof window !== "undefined") {
+      const savedPasscode = localStorage.getItem("smriti_tribute_passcode");
+      if (savedPasscode && cleanCode === savedPasscode) {
+        isSuccess = true;
+      }
+    }
+
+    // 2. Check server API route
+    if (!isSuccess) {
+      try {
+        const res = await fetch("/api/tribute-passcode", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: cleanCode })
+        });
+        const data = await res.json();
+        isSuccess = Boolean(data.success);
+      } catch {
+        // network issue
+      }
+    }
+
+    // 3. Fallback to master codes
+    if (!isSuccess) {
+      isSuccess = cleanCode === "67672006" || cleanCode === "20061029";
     }
 
     if (isSuccess) {

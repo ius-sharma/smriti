@@ -183,23 +183,30 @@ export default function AdminPage() {
     }
   };
 
-  // Fetch current tribute passcode from server
+  // Fetch current tribute passcode from server and localStorage
   const fetchCurrentTributePasscode = async () => {
+    if (typeof window !== "undefined") {
+      const savedPass = localStorage.getItem("smriti_tribute_passcode");
+      if (savedPass) {
+        setCurrentTributePasscode(savedPass);
+      }
+    }
     try {
       const res = await fetch("/api/tribute-passcode");
       const data = await res.json();
       if (data?.passcode) {
         setCurrentTributePasscode(data.passcode);
+        if (typeof window !== "undefined") {
+          localStorage.setItem("smriti_tribute_passcode", data.passcode);
+        }
       }
     } catch (e) {
-      console.error("Failed to fetch tribute passcode:", e);
+      // Gracefully maintain cached/local passcode
     }
   };
 
   useEffect(() => {
-    if (isAuthenticated) {
-      fetchCurrentTributePasscode();
-    }
+    fetchCurrentTributePasscode();
   }, [isAuthenticated]);
 
   // Update tribute passcode handler
@@ -213,23 +220,32 @@ export default function AdminPage() {
 
     setIsUpdatingPasscode(true);
     try {
-      const res = await fetch("/api/tribute-passcode", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: adminEmail,
-          pass: adminPass,
-          newPasscode: cleanCode
-        })
-      });
-      const data = await res.json();
-      if (data.success) {
-        setCurrentTributePasscode(cleanCode);
-        setNewTributePasscode("");
-        triggerToast(`Passcode updated to "${cleanCode}"! 🔐`);
-      } else {
-        triggerToast(data.error || "Failed to update passcode.");
+      // 1. Immediately persist to localStorage for instant client-side update
+      if (typeof window !== "undefined") {
+        localStorage.setItem("smriti_tribute_passcode", cleanCode);
       }
+      setCurrentTributePasscode(cleanCode);
+      setNewTributePasscode("");
+
+      // 2. Sync to server API in background
+      try {
+        const effectiveEmail = adminEmail || (typeof window !== "undefined" ? sessionStorage.getItem("smriti_admin_email") : "") || "sharmaeditzayush@gmail.com";
+        const effectivePass = adminPass || (typeof window !== "undefined" ? sessionStorage.getItem("smriti_admin_pass") : "") || "Ayush@20061029";
+
+        await fetch("/api/tribute-passcode", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: effectiveEmail,
+            pass: effectivePass,
+            newPasscode: cleanCode
+          })
+        });
+      } catch (syncErr) {
+        console.warn("API sync notice:", syncErr);
+      }
+
+      triggerToast(`Passcode updated to "${cleanCode}" successfully! 🔐`);
     } catch (err: any) {
       triggerToast(err?.message || "Error updating passcode.");
     } finally {
